@@ -156,6 +156,8 @@ A workspace-owned canonical source. Keeping sources workspace-scoped makes autho
 | `first_discovered_at`, `last_discovered_at` | timestamptz | required |
 | `content_hash` | text | nullable until extraction |
 | `content_storage_path` | text | nullable; raw or cleaned content object path |
+| `storage_class` | text | `S0` through `S5` from the retention policy; default `S0` |
+| `content_expires_at` | timestamptz | nullable retention deadline |
 | `language` | text | BCP 47 code |
 | `source_quality_score` | numeric(4,3) | nullable |
 | `extraction_status` | text | `pending`, `success`, `partial`, `failed`, `blocked` |
@@ -168,6 +170,8 @@ Unique: `(workspace_id, canonical_url)`. Optional duplicate guard: `(workspace_i
 ### `research_run_sources`
 
 Many-to-many discovery ledger that records why a source was accepted, rejected, or deduplicated in a run.
+
+The physical Supabase schema also stores `workspace_id` on this and every tenant-owned join table. Composite foreign keys enforce that both parents belong to that workspace and make RLS direct and auditable.
 
 | Column | Type | Rules |
 |---|---|---|

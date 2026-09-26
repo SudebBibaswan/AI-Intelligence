@@ -9,8 +9,11 @@ This guide takes the Intelligence Lead from an approved architecture to evidence
 - One reviewer who understands the AI domain and one second reviewer for disputed labels.
 - The [Research Engine Architecture and Build Plan](research_engine_architecture_and_build_plan.md).
 - The [Research Evaluation Reference](research_evaluation_reference.md).
+- The [Gold Set Human Review Procedure](how_to_review_research_gold_set.md).
+- The [Research Engine Generalization and Department Readiness](research_engine_generalization_and_department_readiness.md).
 - The [Initial AI Source Catalogue](initial_ai_source_catalog.md).
 - The [Content Storage and Retention Policy](content_storage_and_retention_policy.md).
+- The [n8n Provider Credential Setup Guide](../operations/how_to_configure_n8n_provider_credentials.md).
 
 Provider credentials belong in provider dashboards or the n8n credential store. Never add them to evaluation files, screenshots, workflow exports, or Git.
 
@@ -27,6 +30,8 @@ Provider credentials belong in provider dashboards or the n8n credential store. 
 | Provider routing recommendation | Intelligence Lead | Backend approves operational fit |
 
 ## Step 1: Freeze the evaluation version
+
+First run the readiness assessment and repair steps in the [Gold Set Human Review Procedure](how_to_review_research_gold_set.md). The current seeded v1 file has the correct bucket counts but is not benchmark-ready because its publisher and geography distribution does not yet meet the evaluation rules.
 
 Copy `evaluation/research_gold_set_template.csv` to a versioned working file such as:
 
@@ -200,4 +205,3 @@ Pause that route and record quota exhaustion. Do not change result limits for on
 - [Initial AI Source Catalogue](initial_ai_source_catalog.md)
 - [Content Storage and Retention Policy](content_storage_and_retention_policy.md)
 - [Model Routing and Cost Control](../architecture/model_routing_and_cost_control.md)
-

@@ -1,0 +1,17 @@
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Supabase local state
+.supabase/
+supabase/.branches/
+supabase/.temp/
+
+# Common generated files
+node_modules/
+dist/
+coverage/
+*.log
+
