@@ -65,6 +65,22 @@ begin
   ) then
     raise exception 'Private research-content bucket is missing';
   end if;
+
+  if not (
+    has_function_privilege('service_role', 'public.n8n_claim_research_run(uuid,uuid)', 'EXECUTE')
+    and has_function_privilege('service_role', 'public.n8n_set_research_run_status(uuid,uuid,text,jsonb,jsonb)', 'EXECUTE')
+    and has_function_privilege('service_role', 'public.n8n_record_research_source(jsonb)', 'EXECUTE')
+    and has_function_privilege('service_role', 'public.n8n_record_research_evidence(jsonb)', 'EXECUTE')
+  ) then
+    raise exception 'One or more n8n research runtime functions are missing service_role EXECUTE access';
+  end if;
+
+  if has_function_privilege('authenticated', 'public.n8n_claim_research_run(uuid,uuid)', 'EXECUTE')
+    or has_function_privilege('authenticated', 'public.n8n_set_research_run_status(uuid,uuid,text,jsonb,jsonb)', 'EXECUTE')
+    or has_function_privilege('authenticated', 'public.n8n_record_research_source(jsonb)', 'EXECUTE')
+    or has_function_privilege('authenticated', 'public.n8n_record_research_evidence(jsonb)', 'EXECUTE') then
+    raise exception 'Authenticated users must not execute n8n research runtime functions';
+  end if;
 end $$;
 
 select

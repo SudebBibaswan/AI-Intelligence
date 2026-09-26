@@ -18,6 +18,7 @@ Required owner input: Supabase development project reference and authenticated C
 - A private `research-content` storage bucket.
 - An initial Artificial Intelligence domain profile.
 - A signup trigger that creates a profile and personal workspace for each new Auth user.
+- Service-only, replay-safe n8n functions for claiming runs and recording sources and evidence.
 
 ## Security boundary
 
@@ -67,7 +68,7 @@ supabase link --project-ref YOUR_PROJECT_REF
 supabase db push --dry-run
 ```
 
-Inspect the dry-run output. It should show six pending migrations in timestamp order. If the project is correct, apply them:
+Inspect the dry-run output. It should show seven pending migrations in timestamp order. If the project is correct, apply them:
 
 ```powershell
 supabase db push
@@ -164,7 +165,7 @@ Never make an untracked production schema change in the Dashboard. If an emergen
 [ ] Existing remote schema disposition confirmed
 [ ] CLI authenticated and linked to the correct project reference
 [ ] Dry-run reviewed
-[ ] Six migrations applied in order
+[ ] Seven migrations applied in order
 [ ] supabase/verify.sql passes
 [ ] Signup creates profile, workspace, and owner membership
 [ ] Two-user RLS isolation tests pass
@@ -180,4 +181,3 @@ Never make an untracked production schema change in the Dashboard. If an emergen
 - [Security and Row Level Security](security_and_rls.md)
 - [API and Frontend Data Contracts](api_and_frontend_contracts.md)
 - [System Architecture](system_architecture.md)
-

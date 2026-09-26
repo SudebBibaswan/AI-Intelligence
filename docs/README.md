@@ -38,6 +38,7 @@ Resolve a conflict by updating all affected documents in the same pull request. 
 | [Research Generalization and Department Readiness](research/research_engine_generalization_and_department_readiness.md) | AI, product, department leads | What is reusable and what each department must validate independently |
 | [Research Engine Workflow](research/research_engine_workflow.md) | AI, n8n, backend | Node boundaries, retries, and handoffs |
 | [n8n Provider Credential Setup](operations/how_to_configure_n8n_provider_credentials.md) | AI, n8n, security | Secure Tavily, Exa, Firecrawl, and OpenAI development credentials |
+| [First n8n Research Agent Build Guide](operations/how_to_build_first_n8n_research_agent.md) | AI, n8n, backend | Build the manual review-only Research Engine from run claim through evidence persistence |
 | [Parallel Delivery Plan](team/parallel_delivery_plan.md) | Entire team | Workstreams, dependencies, and integration gates |
 | [Architecture Decisions](decisions/README.md) | Entire team | Accepted cross-team technical decisions |
 | [Open Decisions](decisions/open_decisions.md) | Leads and founders | Choices that must be resolved before affected implementation |
