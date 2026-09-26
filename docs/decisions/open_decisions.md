@@ -32,7 +32,9 @@ Owner: Backend and Intelligence Leads.
 
 ### Initial source adapters
 
-Decision: choose the exact three MVP channels and providers, their terms, quotas, expected coverage, and fallback behavior. At least one channel should be close to primary sources.
+Proposed baseline: selected official/RSS feeds, arXiv/GitHub structured sources, and one benchmarked web-search provider. Evaluate Tavily and Exa for search; prefer direct extraction, then Jina Reader, with Firecrawl for dynamic or difficult pages. See `docs/research/research_engine_architecture_and_build_plan.md`.
+
+Decision: approve the exact monitored-source list and select the default search/extraction providers after the gold-set benchmark. Record their terms, quotas, expected coverage, and fallback behavior.
 
 Owner: Intelligence Lead.
 
@@ -41,6 +43,14 @@ Owner: Intelligence Lead.
 Decision: what full text may be stored, for how long, in which private bucket, and what the product may display. Define behavior for paywalls, robots restrictions, deleted pages, transcripts, and copyrighted material.
 
 Owner: Intelligence Lead with Backend and Product Leads.
+
+### Research provider and model evaluation
+
+Proposed baseline: evaluate provider and model choices on a reviewed gold set before allowing automatic acceptance. Free credits are experimental capacity rather than an architectural dependency.
+
+Decision: approve the evaluation set, minimum quality gates, fallback providers, and the first hosted open-weight and commercial models for relevance and evidence extraction.
+
+Owner: Intelligence Lead with Backend Lead.
 
 ### Relevance and source-quality thresholds
 

@@ -28,6 +28,11 @@ Resolve a conflict by updating all affected documents in the same pull request. 
 | [Security and RLS](architecture/security_and_rls.md) | Backend, n8n | Tenant isolation and credential boundaries |
 | [Model Routing and Cost Control](architecture/model_routing_and_cost_control.md) | AI, backend, product | Which work uses which model tier and how cost is recorded |
 | [Universal Research Contract](research/universal_research_contract.md) | AI, n8n, backend | Normalized ingestion payload |
+| [Research Engine Architecture and Build Plan](research/research_engine_architecture_and_build_plan.md) | AI, n8n, backend, product | Source strategy, provider routing, quality gates, evaluation, and phased build order |
+| [Phase 0 Execution Guide](research/phase0_execution_plan.md) | AI, backend, product | How to benchmark and approve sources, providers, models, limits, and retention |
+| [Research Evaluation Reference](research/research_evaluation_reference.md) | AI, backend | Gold-set labels, metrics, mandatory gates, and benchmark records |
+| [Initial AI Source Catalogue](research/initial_ai_source_catalog.md) | AI, product | Proposed monitored sources, priorities, channels, and approval checks |
+| [Content Storage and Retention Policy](research/content_storage_and_retention_policy.md) | AI, backend, product | What content may be stored, displayed, expired, and sent to providers |
 | [Research Engine Workflow](research/research_engine_workflow.md) | AI, n8n, backend | Node boundaries, retries, and handoffs |
 | [Parallel Delivery Plan](team/parallel_delivery_plan.md) | Entire team | Workstreams, dependencies, and integration gates |
 | [Architecture Decisions](decisions/README.md) | Entire team | Accepted cross-team technical decisions |
@@ -43,6 +48,8 @@ The JSON Schemas in `/schemas` are normative for workflow output and API validat
 - `validation-result.schema.json`
 
 Every payload includes `schema_version`. Breaking changes require a new major version and an architecture decision record. Additive optional fields may use a minor version.
+
+Research evaluation begins with `/evaluation/research_gold_set_template.csv`. It is a working review dataset, not a runtime API contract.
 
 ## Change protocol
 
