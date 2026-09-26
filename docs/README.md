@@ -49,7 +49,7 @@ The JSON Schemas in `/schemas` are normative for workflow output and API validat
 
 Every payload includes `schema_version`. Breaking changes require a new major version and an architecture decision record. Additive optional fields may use a minor version.
 
-Research evaluation begins with `/evaluation/research_gold_set_template.csv`. It is a working review dataset, not a runtime API contract.
+Research evaluation begins with `/evaluation/research_gold_set_template.csv`. The seeded Phase 0 review set is `/evaluation/research_gold_set_v1.csv`, with its reviewer-friendly workbook at `/outputs/research-engine-phase0/research_gold_set_v1.xlsx`. All v1 seed labels require a second human review before they may be used for provider scoring; these files are evaluation assets, not runtime API contracts.
 
 ## Change protocol
 
