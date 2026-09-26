@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://intelligence-platform.local/schemas/research-source.schema.json",
+  "title": "Universal Research Source",
+  "description": "Normalized source record exchanged by the shared Research Engine.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source_id",
+    "workspace_id",
+    "workspace_domain_id",
+    "collection_run_id",
+    "source_type",
+    "discovery",
+    "identity",
+    "content",
+    "classification",
+    "verification",
+    "metadata"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "source_id": {"$ref": "#/$defs/uuid"},
+    "workspace_id": {"$ref": "#/$defs/uuid"},
+    "workspace_domain_id": {"$ref": "#/$defs/uuid"},
+    "collection_run_id": {"$ref": "#/$defs/uuid"},
+    "source_type": {
+      "enum": [
+        "article",
+        "company_page",
+        "fund_page",
+        "portfolio_page",
+        "paper",
+        "filing",
+        "repository",
+        "transcript",
+        "video",
+        "post",
+        "dataset",
+        "press_release",
+        "job_posting",
+        "regulatory_notice",
+        "other"
+      ]
+    },
+    "discovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["channel", "provider", "query", "result_rank", "external_result_id", "discovered_at"],
+      "properties": {
+        "channel": {
+          "enum": ["web_search", "rss", "official_site", "yc", "vc_site", "github", "arxiv", "hacker_news", "reddit", "youtube", "api", "manual", "other"]
+        },
+        "provider": {"type": "string", "minLength": 1},
+        "query": {"type": ["string", "null"]},
+        "result_rank": {"type": ["integer", "null"], "minimum": 1},
+        "external_result_id": {"type": ["string", "null"]},
+        "discovered_at": {"$ref": "#/$defs/dateTime"}
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["original_url", "canonical_url", "title", "publisher", "author", "language", "published_at"],
+      "properties": {
+        "original_url": {"type": "string", "format": "uri"},
+        "canonical_url": {"type": "string", "format": "uri"},
+        "title": {"type": "string", "minLength": 1},
+        "publisher": {"type": ["string", "null"]},
+        "author": {"type": ["string", "null"]},
+        "language": {"type": ["string", "null"], "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"},
+        "published_at": {"oneOf": [{"$ref": "#/$defs/dateTime"}, {"type": "null"}]}
+      }
+    },
+    "content": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "summary", "content_hash", "extraction_method", "extracted_at", "status"],
+      "properties": {
+        "text": {"type": ["string", "null"]},
+        "summary": {"type": ["string", "null"]},
+        "content_hash": {"type": ["string", "null"], "pattern": "^sha256:[a-fA-F0-9]{64}$"},
+        "extraction_method": {"type": ["string", "null"]},
+        "extracted_at": {"oneOf": [{"$ref": "#/$defs/dateTime"}, {"type": "null"}]},
+        "status": {"enum": ["pending", "success", "partial", "failed", "blocked"]}
+      }
+    },
+    "classification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain_key", "topics", "geographies", "entity_types", "relevance_score", "source_quality_score", "decision", "reason_codes"],
+      "properties": {
+        "domain_key": {"type": "string", "minLength": 1},
+        "topics": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "geographies": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "entity_types": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "relevance_score": {"$ref": "#/$defs/score"},
+        "source_quality_score": {"$ref": "#/$defs/score"},
+        "decision": {"enum": ["accepted", "rejected", "duplicate", "needs_review"]},
+        "reason_codes": {"type": "array", "items": {"type": "string", "pattern": "^[A-Z0-9_]+$"}, "uniqueItems": true}
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "checked_at", "checks"],
+      "properties": {
+        "status": {"enum": ["unverified", "verified", "partially_verified", "disputed", "rejected"]},
+        "checked_at": {"oneOf": [{"$ref": "#/$defs/dateTime"}, {"type": "null"}]},
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "passed", "details"],
+            "properties": {
+              "type": {"type": "string", "minLength": 1},
+              "passed": {"type": "boolean"},
+              "details": {"type": ["string", "null"]}
+            }
+          }
+        }
+      }
+    },
+    "metadata": {"type": "object"}
+  },
+  "$defs": {
+    "uuid": {"type": "string", "format": "uuid"},
+    "dateTime": {"type": "string", "format": "date-time"},
+    "score": {"type": "number", "minimum": 0, "maximum": 1}
+  }
+}

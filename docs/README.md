@@ -1,0 +1,56 @@
+# Intelligence Platform Documentation
+
+This directory is the shared implementation reference for the Intelligence Platform. The master plan explains the product vision; the documents below turn that vision into contracts that product, frontend, backend, data, and n8n contributors can use independently without inventing incompatible structures.
+
+## Source of truth order
+
+When two documents disagree, use this order:
+
+1. Accepted architecture decision records in `docs/decisions`
+2. Machine-readable contracts in `schemas`
+3. Database and API contracts in `docs/architecture`
+4. Research workflow specifications in `docs/research`
+5. Product scope and vocabulary in `docs/product`
+6. `intelligence_platform_master_plan.md` for product intent
+
+Resolve a conflict by updating all affected documents in the same pull request. Do not silently choose one interpretation.
+
+## Foundation documents
+
+| Document | Primary audience | Decision it unlocks |
+|---|---|---|
+| [Master Product and Build Plan](intelligence_platform_master_plan.md) | Entire team | Product intent and long-term direction |
+| [MVP Scope and Acceptance Criteria](product/mvp_scope_and_acceptance.md) | Product, design, engineering | What the first usable release includes |
+| [Product Vocabulary](product/product_vocabulary.md) | Entire team | Exact meanings of intelligence terms |
+| [System Architecture](architecture/system_architecture.md) | Backend, AI, frontend | Service boundaries and data flow |
+| [Database Schema](architecture/database_schema.md) | Backend, frontend, n8n | Canonical tables, keys, states, and lineage |
+| [API and Frontend Data Contracts](architecture/api_and_frontend_contracts.md) | Frontend, backend | Stable read and write interfaces |
+| [Security and RLS](architecture/security_and_rls.md) | Backend, n8n | Tenant isolation and credential boundaries |
+| [Model Routing and Cost Control](architecture/model_routing_and_cost_control.md) | AI, backend, product | Which work uses which model tier and how cost is recorded |
+| [Universal Research Contract](research/universal_research_contract.md) | AI, n8n, backend | Normalized ingestion payload |
+| [Research Engine Workflow](research/research_engine_workflow.md) | AI, n8n, backend | Node boundaries, retries, and handoffs |
+| [Parallel Delivery Plan](team/parallel_delivery_plan.md) | Entire team | Workstreams, dependencies, and integration gates |
+| [Architecture Decisions](decisions/README.md) | Entire team | Accepted cross-team technical decisions |
+| [Open Decisions](decisions/open_decisions.md) | Leads and founders | Choices that must be resolved before affected implementation |
+
+## Machine-readable contracts
+
+The JSON Schemas in `/schemas` are normative for workflow output and API validation:
+
+- `research-source.schema.json`
+- `signal.schema.json`
+- `hypothesis.schema.json`
+- `validation-result.schema.json`
+
+Every payload includes `schema_version`. Breaking changes require a new major version and an architecture decision record. Additive optional fields may use a minor version.
+
+## Change protocol
+
+1. State the problem in an issue or pull request.
+2. Identify affected database, API, workflow, UI, and JSON contracts.
+3. Update the decision record first if the change alters an accepted boundary.
+4. Update machine-readable and human-readable contracts together.
+5. Add migration and compatibility notes.
+6. Obtain review from the owners of every affected workstream.
+
+The current foundation contract version is `1.0.0`.

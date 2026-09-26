@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://intelligence-platform.local/schemas/signal.schema.json",
+  "title": "Intelligence Signal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "signal_id",
+    "workspace_id",
+    "workspace_domain_id",
+    "signal_type",
+    "title",
+    "summary",
+    "event_at",
+    "confidence",
+    "novelty_score",
+    "importance_score",
+    "status",
+    "evidence",
+    "entities",
+    "geographies",
+    "topics",
+    "engine_version",
+    "metadata"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "signal_id": {"$ref": "#/$defs/uuid"},
+    "workspace_id": {"$ref": "#/$defs/uuid"},
+    "workspace_domain_id": {"$ref": "#/$defs/uuid"},
+    "signal_type": {
+      "enum": ["funding", "launch", "partnership", "acquisition", "founder_movement", "hiring", "research", "technology", "regulation", "market", "shutdown", "investment_thesis", "other"]
+    },
+    "title": {"type": "string", "minLength": 1, "maxLength": 240},
+    "summary": {"type": "string", "minLength": 1, "maxLength": 2000},
+    "event_at": {"oneOf": [{"$ref": "#/$defs/dateTime"}, {"type": "null"}]},
+    "confidence": {"$ref": "#/$defs/score"},
+    "novelty_score": {"$ref": "#/$defs/score"},
+    "importance_score": {"$ref": "#/$defs/score"},
+    "status": {"enum": ["draft", "accepted", "rejected", "superseded"]},
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["evidence_id", "role", "weight"],
+        "properties": {
+          "evidence_id": {"$ref": "#/$defs/uuid"},
+          "role": {"enum": ["supporting", "contradicting", "context"]},
+          "weight": {"$ref": "#/$defs/score"}
+        }
+      }
+    },
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entity_id", "role"],
+        "properties": {
+          "entity_id": {"$ref": "#/$defs/uuid"},
+          "role": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "geographies": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "topics": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "engine_version": {"type": "string", "minLength": 1},
+    "metadata": {"type": "object"}
+  },
+  "$defs": {
+    "uuid": {"type": "string", "format": "uuid"},
+    "dateTime": {"type": "string", "format": "date-time"},
+    "score": {"type": "number", "minimum": 0, "maximum": 1}
+  }
+}
