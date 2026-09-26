@@ -288,7 +288,7 @@ create table public.insights (
     references public.hypotheses(id, workspace_id),
   foreign key (validation_run_id, workspace_id)
     references public.validation_runs(id, workspace_id),
-  check (validation_run_id is not null or jsonb_object_length(analytical_basis) > 0)
+  check ( validation_run_id is not null or analytical_basis <> '{}'::jsonb)
 );
 
 create table public.saved_items (
