@@ -13,7 +13,7 @@ begin
     'observation_signals', 'theses', 'thesis_evidence', 'patterns',
     'pattern_observations', 'hypotheses', 'hypothesis_patterns', 'validation_runs',
     'validation_evidence', 'insights', 'saved_items', 'daily_briefs', 'llm_usage',
-    'job_runs', 'audit_log'
+    'job_runs', 'audit_log', 'domain_collection_schedules'
   ]
   loop
     if not exists (
@@ -52,11 +52,21 @@ begin
     end if;
   end loop;
 
-  if not exists (
-    select 1 from public.domains
-    where key = 'artificial-intelligence' and is_active
-  ) then
-    raise exception 'Artificial Intelligence domain seed is missing';
+  if (
+    select count(*)
+    from public.domains
+    where is_active
+      and key in (
+        'cybersecurity',
+        'banking-financial-services',
+        'ai-manufacturing-operations',
+        'healthcare',
+        'core-ai-it-infrastructure',
+        'agriculture',
+        'retail-ecommerce'
+      )
+  ) <> 7 then
+    raise exception 'One or more required v1 domain seeds are missing or inactive';
   end if;
 
   if not exists (
@@ -71,6 +81,8 @@ begin
     and has_function_privilege('service_role', 'public.n8n_set_research_run_status(uuid,uuid,text,jsonb,jsonb)', 'EXECUTE')
     and has_function_privilege('service_role', 'public.n8n_record_research_source(jsonb)', 'EXECUTE')
     and has_function_privilege('service_role', 'public.n8n_record_research_evidence(jsonb)', 'EXECUTE')
+    and has_function_privilege('service_role', 'public.n8n_bootstrap_shared_research_workspace(uuid)', 'EXECUTE')
+    and has_function_privilege('service_role', 'public.n8n_schedule_domain_collection_runs(timestamptz)', 'EXECUTE')
   ) then
     raise exception 'One or more n8n research runtime functions are missing service_role EXECUTE access';
   end if;
@@ -78,7 +90,9 @@ begin
   if has_function_privilege('authenticated', 'public.n8n_claim_research_run(uuid,uuid)', 'EXECUTE')
     or has_function_privilege('authenticated', 'public.n8n_set_research_run_status(uuid,uuid,text,jsonb,jsonb)', 'EXECUTE')
     or has_function_privilege('authenticated', 'public.n8n_record_research_source(jsonb)', 'EXECUTE')
-    or has_function_privilege('authenticated', 'public.n8n_record_research_evidence(jsonb)', 'EXECUTE') then
+    or has_function_privilege('authenticated', 'public.n8n_record_research_evidence(jsonb)', 'EXECUTE')
+    or has_function_privilege('authenticated', 'public.n8n_bootstrap_shared_research_workspace(uuid)', 'EXECUTE')
+    or has_function_privilege('authenticated', 'public.n8n_schedule_domain_collection_runs(timestamptz)', 'EXECUTE') then
     raise exception 'Authenticated users must not execute n8n research runtime functions';
   end if;
 end $$;

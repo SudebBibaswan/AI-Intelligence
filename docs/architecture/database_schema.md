@@ -114,6 +114,23 @@ Global catalog, readable by authenticated users.
 
 Unique: `(workspace_id, domain_id, name)` where not archived.
 
+### `domain_collection_schedules`
+
+Service-only configuration for the twice-daily shared collection layer. One row exists per catalog domain.
+
+| Column | Type | Notes |
+|---|---|---|
+| `domain_id` | uuid | Primary key and FK to `domains` |
+| `collector_workspace_id` | uuid | Hidden service workspace; nullable until bootstrap |
+| `collector_workspace_domain_id` | uuid | Internal collector configuration for this domain |
+| `slot_hours_utc` | smallint[] | Exactly two distinct UTC hours; default `[0, 12]` |
+| `profile_version` | text | Domain research-profile version used in idempotency |
+| `engine_version` | text | Research Engine version used in idempotency |
+| `schedule_config` | jsonb | Additive provider, limit, or schedule configuration |
+| `is_enabled` | boolean | Disabled until the service workspace is bootstrapped |
+
+The table is protected by RLS with no browser policies. Only `service_role` may configure it. The scheduler creates a run only when a non-service workspace has the domain active.
+
 ## Research ingestion
 
 ### `research_runs`
@@ -402,6 +419,8 @@ Migration `202609270007_n8n_research_runtime.sql` exposes four Data API function
 | `n8n_set_research_run_status` | Applies forward-only stage or terminal status changes with metrics and sanitized error patches. |
 | `n8n_record_research_source` | Enforces workspace lineage, canonical/content deduplication, discovery ledger persistence, and review-only acceptance rules. |
 | `n8n_record_research_evidence` | Persists replay-safe evidence, enforces source/run workspace lineage, and downgrades model verification in review-only mode. |
+| `n8n_bootstrap_shared_research_workspace` | Idempotently creates the hidden service workspace, seven collector domain rows, and enabled schedule mappings. |
+| `n8n_schedule_domain_collection_runs` | Queues at most one shared run for each eligible domain and UTC schedule slot. |
 
 `anon` and `authenticated` cannot execute these functions. A Supabase secret key used by n8n can call them and therefore must remain in the n8n credential store. See [How to Build the First n8n Research Agent](../operations/how_to_build_first_n8n_research_agent.md).
 

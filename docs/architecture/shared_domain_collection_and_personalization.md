@@ -206,7 +206,7 @@ No existing frontend table or response must be removed or renamed. Implementatio
 
 | Logical structure | Purpose | Duplication rule |
 |---|---|---|
-| `domain_collection_schedule` | Two slots, profile version, next run, and last run per domain | One row per domain |
+| `domain_collection_schedules` | Two UTC slots, collector mapping, profile version, engine version, and schedule configuration | One row per domain |
 | `workspace_personalization_profiles` | Versioned explicit and learned preferences plus scoring version | One active profile per workspace-domain |
 | `workspace_feed_items` | Item reference, score, factor breakdown, rank, eligibility reason, generated/expiry time | References shared item; never copies source content |
 | `workspace_item_feedback` | Explicit user actions used by ranking and quality review | One event stream with idempotent action IDs |
