@@ -2,13 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, ChevronDown, Compass, FlaskConical, Library, Menu, Search, Settings, Sparkles, X } from "lucide-react";
+import { BookOpen, ChevronDown, Compass, Library, Menu, Search, Settings, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 
 const navigation = [
   { href: "/workspace", label: "Overview", icon: Compass },
   { href: "/signals", label: "What changed", icon: Sparkles },
-  { href: "/research", label: "Research runs", icon: FlaskConical },
   { href: "/patterns", label: "Patterns", icon: BookOpen },
   { href: "/hypotheses", label: "Hypotheses", icon: Library },
 ];
@@ -28,7 +27,7 @@ function Navigation({ close }: { close?: () => void }) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   return <div className="min-h-screen lg:flex">
-    <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-line bg-[#efeee8] p-5 lg:flex">
+    <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-line bg-[#090e27] p-5 lg:flex">
       <Brand />
       <button className="button mt-10 w-full justify-start text-slate-600" type="button"><Search size={15} />Search <kbd className="ml-auto font-mono text-[10px] text-slate-400">⌘ K</kbd></button>
       <p className="eyebrow mb-3 mt-8 px-3">Workspace</p>
@@ -43,13 +42,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-20 flex h-[68px] items-center justify-between border-b border-line bg-paper/95 px-5 backdrop-blur lg:px-12">
         <div className="flex items-center gap-3 lg:hidden"><button aria-label="Open navigation" className="rounded p-1.5" onClick={() => setMobileOpen(true)}><Menu size={21} /></button><Brand compact /></div>
         <div className="hidden items-center gap-2 lg:flex"><span className="meta">Workspace</span><ChevronDown size={14} className="text-slate-500" /><span className="mx-2 text-slate-300">/</span><span className="text-xs font-semibold">AI Intelligence</span></div>
-        <div className="flex items-center gap-3"><span className="hidden items-center gap-2 text-xs text-slate-500 sm:flex"><span className="h-2 w-2 rounded-full bg-emerald-600" />Research healthy</span><Link className="button button-primary" href="/research/new"><FlaskConical size={14} />New research</Link></div>
+        <div className="flex items-center gap-3"><Link className="button button-primary" href="/workspace"><Sparkles size={14} />Explore insights</Link></div>
       </header>
       <main className="mx-auto max-w-[1360px] px-5 py-8 sm:px-8 lg:px-12 lg:py-10">{children}</main>
     </div>
 
-    {mobileOpen && <div className="fixed inset-0 z-50 bg-ink/45 lg:hidden" onMouseDown={() => setMobileOpen(false)}>
-      <aside className="h-full w-[min(320px,85vw)] bg-[#efeee8] p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+    {mobileOpen && <div className="fixed inset-0 z-50 bg-black/70 lg:hidden" onMouseDown={() => setMobileOpen(false)}>
+      <aside className="h-full w-[min(320px,85vw)] bg-[#090e27] p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-between"><Brand /><button className="rounded p-2" aria-label="Close navigation" onClick={() => setMobileOpen(false)}><X size={20} /></button></div>
         <button className="button mt-9 w-full justify-start"><Search size={15} />Search intelligence</button>
         <p className="eyebrow mb-3 mt-8 px-3">Workspace</p><Navigation close={() => setMobileOpen(false)} />

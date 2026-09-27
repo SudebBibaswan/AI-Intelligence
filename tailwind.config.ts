@@ -5,11 +5,15 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#14262d",
-        paper: "#f6f5f0",
-        teal: "#175f5f",
-        rust: "#a1512b",
-        line: "#d9d8d0",
+        ink: "#eef2ff",
+        paper: "#070a1b",
+        teal: {
+          DEFAULT: "#7c5cff",
+          200: "#a99aff",
+          300: "#55c8ff",
+        },
+        rust: "#a99aff",
+        line: "#28345f",
       },
       fontFamily: {
         display: ["var(--font-display)", "Georgia", "serif"],
