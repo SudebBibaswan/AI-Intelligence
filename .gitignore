@@ -15,3 +15,5 @@ dist/
 coverage/
 *.log
 
+# Replit prototype/reference (not production source)
+replt/
