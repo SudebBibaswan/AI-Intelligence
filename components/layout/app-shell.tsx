@@ -6,7 +6,7 @@ import { BookOpen, ChevronDown, Compass, FlaskConical, Library, Menu, Search, Se
 import { useState } from "react";
 
 const navigation = [
-  { href: "/", label: "Overview", icon: Compass },
+  { href: "/workspace", label: "Overview", icon: Compass },
   { href: "/signals", label: "What changed", icon: Sparkles },
   { href: "/research", label: "Research runs", icon: FlaskConical },
   { href: "/patterns", label: "Patterns", icon: BookOpen },
@@ -17,7 +17,7 @@ function Navigation({ close }: { close?: () => void }) {
   const pathname = usePathname();
   return <nav className="space-y-1" aria-label="Primary navigation">
     {navigation.map(({ href, label, icon: Icon }) => {
-      const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+      const active = pathname.startsWith(href);
       return <Link className={`nav-link ${active ? "nav-link-active" : ""}`} href={href} onClick={close} key={href}>
         <Icon size={16} strokeWidth={1.8} />{label}
       </Link>;
@@ -59,5 +59,5 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 }
 
 function Brand({ compact = false }: { compact?: boolean }) {
-  return <Link href="/" className="flex items-center gap-2.5"><span className="grid h-8 w-8 place-items-center rounded-sm border border-teal font-display text-2xl leading-none text-teal">i</span>{!compact && <span className="text-[13px] font-bold tracking-tight">intelligence<span className="text-teal">.</span></span>}</Link>;
+  return <Link href="/workspace" className="flex items-center gap-2.5"><span className="grid h-8 w-8 place-items-center rounded-sm border border-teal font-display text-2xl leading-none text-teal">i</span>{!compact && <span className="text-[13px] font-bold tracking-tight">intelligence<span className="text-teal">.</span></span>}</Link>;
 }

@@ -1,4 +1,3 @@
-import { Dashboard } from "@/components/dashboard/dashboard";
-import { AppShell } from "@/components/layout/app-shell";
+import { HomePage } from "@/components/marketing/home-page";
 
-export default function HomePage() { return <AppShell><Dashboard /></AppShell>; }
+export default function RootPage() { return <HomePage />; }

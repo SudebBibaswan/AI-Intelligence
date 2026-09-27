@@ -16,6 +16,7 @@ dist/
 coverage/
 *.log
 .DS_Store
+*.tsbuildinfo
 
 # Replit prototype/reference (not production source)
 replt/
