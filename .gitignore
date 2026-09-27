@@ -11,9 +11,11 @@ supabase/.temp/
 
 # Common generated files
 node_modules/
+.next/
 dist/
 coverage/
 *.log
+.DS_Store
 
 # Replit prototype/reference (not production source)
 replt/
