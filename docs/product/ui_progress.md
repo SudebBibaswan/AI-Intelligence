@@ -22,8 +22,9 @@ This is an implementation tracker for the frontend. Product requirements remain 
 - [x] Patterns list and detail
 - [x] Hypothesis creation and detail
 - [ ] Validation request, progress, and result — deferred pending a dedicated hypothesis-testing design
-- [ ] Saved intelligence
-- [ ] Settings and domain configuration
+- [x] Saved intelligence
+- [x] Intelligence timeline
+- [x] Settings and domain configuration
 - [ ] Loading, empty, partial, stale, failed, and permission states
 - [ ] Supabase authentication and typed data integration
 - [ ] n8n research-run status integration

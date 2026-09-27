@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, ChevronDown, Compass, Library, Menu, Search, Settings, Sparkles, X } from "lucide-react";
+import { BookOpen, ChevronDown, Compass, History, Library, Menu, Search, Settings, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 
 const navigation = [
@@ -10,6 +10,8 @@ const navigation = [
   { href: "/signals", label: "What changed", icon: Sparkles },
   { href: "/patterns", label: "Patterns", icon: BookOpen },
   { href: "/hypotheses", label: "Hypotheses", icon: Library },
+  { href: "/library", label: "Saved intelligence", icon: Library },
+  { href: "/timeline", label: "Timeline", icon: History },
 ];
 
 function Navigation({ close }: { close?: () => void }) {
@@ -33,7 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <p className="eyebrow mb-3 mt-8 px-3">Workspace</p>
       <Navigation />
       <div className="mt-auto border-t border-line pt-5">
-        <Link href="/settings" className="nav-link"><Settings size={16} />Settings</Link>
+        <Link href="/settings" className={`nav-link ${usePathname().startsWith("/settings") ? "nav-link-active" : ""}`}><Settings size={16} />Settings</Link>
         <div className="mt-5 flex items-center gap-3 px-3"><span className="grid h-8 w-8 place-items-center rounded-full bg-teal font-mono text-xs font-semibold text-white">AJ</span><div><p className="text-xs font-semibold">Aman Jain</p><p className="meta mt-0.5">Personal workspace</p></div></div>
       </div>
     </aside>
