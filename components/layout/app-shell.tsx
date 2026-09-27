@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, ChevronDown, Compass, History, Library, Menu, Search, Settings, Sparkles, X } from "lucide-react";
+import { BookOpen, ChevronDown, Compass, History, Landmark, Library, Menu, Search, Settings, X } from "lucide-react";
 import { useState } from "react";
 
 const navigation = [
   { href: "/workspace", label: "Overview", icon: Compass },
-  { href: "/signals", label: "What changed", icon: Sparkles },
+  { href: "/investments", label: "Investments", icon: Landmark },
   { href: "/patterns", label: "Patterns", icon: BookOpen },
   { href: "/hypotheses", label: "Hypotheses", icon: Library },
   { href: "/library", label: "Saved intelligence", icon: Library },
@@ -44,7 +44,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-20 flex h-[68px] items-center justify-between border-b border-line bg-paper/95 px-5 backdrop-blur lg:px-12">
         <div className="flex items-center gap-3 lg:hidden"><button aria-label="Open navigation" className="rounded p-1.5" onClick={() => setMobileOpen(true)}><Menu size={21} /></button><Brand compact /></div>
         <div className="hidden items-center gap-2 lg:flex"><span className="meta">Workspace</span><ChevronDown size={14} className="text-slate-500" /><span className="mx-2 text-slate-300">/</span><span className="text-xs font-semibold">AI Intelligence</span></div>
-        <div className="flex items-center gap-3"><Link className="button button-primary" href="/workspace"><Sparkles size={14} />Explore insights</Link></div>
+        <div className="hidden sm:block"><span className="font-mono text-[10px] uppercase tracking-widest text-[#a5abc9]">Daily brief</span></div>
       </header>
       <main className="mx-auto max-w-[1360px] px-5 py-8 sm:px-8 lg:px-12 lg:py-10">{children}</main>
     </div>

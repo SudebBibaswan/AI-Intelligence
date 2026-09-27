@@ -1,0 +1,7 @@
+export const evidenceRecords = [
+  { id: "ev-agent-funding", stance: "Supports", claim: "Agent-governance startups are attracting new early-stage capital for runtime permissions, controls, and audit trails.", source: "Willow announces $7m seed funding", context: "Company announcement · Jun 4, 2026", sourceType: "Company announcement", recordedAt: "Sep 27, 2026 · 08:15 UTC", url: "https://withwillow.ai/blog/willow-7m-seed-funding" },
+  { id: "ev-ecosystem-roundup", stance: "Supports", claim: "Product activity is concentrating around observability and operational context for AI-agent workflows.", source: "Microsoft introduces Azure Copilot Observability Agent", context: "Official product announcement · Jun 23, 2026", sourceType: "Official product announcement", recordedAt: "Sep 27, 2026 · 07:50 UTC", url: "https://blogs.microsoft.com/blog/2026/06/23/rethinking-cloud-operations-with-agentic-observability/" },
+  { id: "ev-incumbent-release", stance: "Counter-evidence", claim: "Established observability providers are extending their platforms into agent workflows, which may limit standalone category size.", source: "Snowflake adds AI Agent Observability", context: "Official product announcement · Sep 22, 2026", sourceType: "Official product announcement", recordedAt: "Sep 26, 2026 · 16:05 UTC", url: "https://www.snowflake.com/en/blog/ai-agent-observability-monitor-debug-optimize-llm-applications/" },
+];
+
+export const evidenceById = Object.fromEntries(evidenceRecords.map((record) => [record.id, record]));
