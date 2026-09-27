@@ -72,12 +72,6 @@ Decision: web framework, server/API deployment, background status transport, err
 
 Owner: Frontend and Backend Leads.
 
-### Dashboard ranking
-
-Decision: exact formula or service for important-signal ranking and the role of confidence, novelty, importance, user interests, and recency.
-
-Owner: Product, Intelligence, and Frontend Leads.
-
 ### User-visible confidence
 
 Decision: whether cards display a numeric score, labelled bands, or only explanations; define calibration and avoid false precision.

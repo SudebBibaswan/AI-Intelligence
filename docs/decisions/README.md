@@ -52,6 +52,18 @@ These records capture choices that affect multiple workstreams. Status is `accep
 
 **Consequences:** Model names are configuration, not embedded business logic. A benchmark and gold dataset govern routing changes.
 
+### ADR 0007 Shared domain collection with multi-factor personalization
+
+Status: accepted. This decision supersedes the public-research scoping portion of ADR 0002; ADR 0002 continues to govern tenant-owned and private data.
+
+**Context:** Running discovery and extraction for every user would multiply provider cost, workflow executions, duplicate storage, and inconsistent evidence. A single unranked domain feed, however, would ignore meaningful differences in user role, objectives, topics, entities, geographies, investment stages, and feedback.
+
+**Decision:** The seven initial domains use two configurable shared collection slots per day. A slot executes only when at least one workspace has that domain active. Public sources, evidence, entities, capital events, and shared signals are collected once in a private service research workspace and reused. Each workspace receives a separately ranked feed through deterministic, explainable multi-factor personalization. Personalization never triggers duplicate crawling, and private workspace data never enters the shared corpus.
+
+The locked domain catalogue and scoring contract are defined in [Shared Domain Collection and Personalization](../architecture/shared_domain_collection_and_personalization.md).
+
+**Consequences:** Normal scheduled collection is capped at fourteen domain runs per day rather than scaling with user count. The existing workspace-scoped research schema remains compatible through a service-owned workspace. Personalization profiles, feedback, and feed references remain tenant-scoped and may be added through backend-only structures without breaking UI contracts.
+
 ## New decision template
 
 ```markdown

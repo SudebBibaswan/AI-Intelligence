@@ -138,7 +138,9 @@ The remediation belongs before human review. After replacements, both reviewers 
 
 ## Readiness decision
 
-The first n8n Research Engine workflow may begin only when:
+Workflow construction may begin against the development Supabase project, and tightly capped manual runs may execute in `review_only` mode. These runs are implementation exercises: they cannot automatically accept evidence, activate a schedule, or establish a provider/model default.
+
+Automatic acceptance or unattended scheduled execution may begin only when:
 
 ```text
 [ ] AI dataset sampling defects repaired
@@ -152,10 +154,11 @@ The first n8n Research Engine workflow may begin only when:
 
 Other departments do not block the AI vertical slice, but their profiles and evaluation sets must pass the same gates before they reuse automatic acceptance.
 
+The hands-on build sequence is defined in [How to Build the First n8n Research Agent](../operations/how_to_build_first_n8n_research_agent.md).
+
 ## Related
 
 - [How to Review and Approve the Research Gold Set](how_to_review_research_gold_set.md)
 - [Research Evaluation Reference](research_evaluation_reference.md)
 - [Research Engine Architecture and Build Plan](research_engine_architecture_and_build_plan.md)
 - [How to Configure Research Provider Credentials in n8n Cloud](../operations/how_to_configure_n8n_provider_credentials.md)
-

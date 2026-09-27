@@ -131,6 +131,15 @@ begin
     raise exception using errcode = '22023', message = 'UNSUPPORTED_RESEARCH_SOURCE_SCHEMA';
   end if;
 
+  if coalesce(p_source #>> '{identity,canonical_url}', '') !~* '^https?://'
+    or coalesce(p_source #>> '{identity,original_url}', '') !~* '^https?://'
+    or btrim(coalesce(p_source #>> '{identity,title}', '')) = ''
+    or btrim(coalesce(p_source ->> 'source_type', '')) = ''
+    or btrim(coalesce(p_source #>> '{discovery,channel}', '')) = ''
+    or btrim(coalesce(p_source #>> '{discovery,discovered_at}', '')) = '' then
+    raise exception using errcode = '22023', message = 'INVALID_SOURCE_IDENTITY';
+  end if;
+
   select * into run_record
   from public.research_runs
   where id = (p_source ->> 'collection_run_id')::uuid
@@ -417,9 +426,24 @@ begin
 
   update public.sources
   set evidence_status = case
-    when normalized_verification = 'verified' then 'accepted'
-    when normalized_verification = 'rejected' then 'rejected'
-    else 'needs_review'
+    when exists (
+      select 1 from public.evidence e
+      where e.source_id = source_record.id
+        and e.workspace_id = source_record.workspace_id
+        and e.verification_status = 'verified'
+    ) then 'accepted'
+    when exists (
+      select 1 from public.evidence e
+      where e.source_id = source_record.id
+        and e.workspace_id = source_record.workspace_id
+        and e.verification_status in ('unverified', 'disputed')
+    ) then 'needs_review'
+    when exists (
+      select 1 from public.evidence e
+      where e.source_id = source_record.id
+        and e.workspace_id = source_record.workspace_id
+    ) then 'rejected'
+    else 'pending'
   end
   where id = source_record.id;
 

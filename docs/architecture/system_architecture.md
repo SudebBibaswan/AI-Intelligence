@@ -1,6 +1,6 @@
 # System Architecture
 
-The platform uses one shared Research Engine to build a workspace-scoped evidence base. Analytical engines consume that evidence through stable contracts; they do not browse independently. The web application reads product data through a backend boundary, while n8n performs asynchronous orchestration.
+The platform uses one shared Research Engine to build a reusable domain evidence base. Scheduled public research is collected once per active domain in a private service research workspace, then ranked separately for each eligible workspace. Analytical engines consume that evidence through stable contracts; they do not browse independently. The web application reads product data through a backend boundary, while n8n performs asynchronous orchestration.
 
 ## Architecture goals
 
@@ -10,6 +10,8 @@ The platform uses one shared Research Engine to build a workspace-scoped evidenc
 - Keep deterministic work outside LLMs.
 - Allow frontend, backend, and workflow contributors to build against stable contracts.
 - Keep the engine domain-agnostic while shipping Artificial Intelligence first.
+- Reuse each domain collection run across eligible workspaces without sharing private tenant data.
+- Personalize feeds deterministically and explainably without per-user crawling.
 
 ## Logical view
 
@@ -28,6 +30,9 @@ flowchart TD
     FILTER --> EXTRACT[Content extraction]
     EXTRACT --> VERIFY[Evidence verification]
     VERIFY --> DB
+
+    DB --> RANK[Workspace personalization and ranking]
+    RANK --> API
 
     DB --> ECO[Ecosystem intelligence]
     DB --> INV[Investment intelligence]
@@ -81,6 +86,7 @@ Consume accepted evidence packs and write versioned analytical outputs. Each eng
 | Research run | Application or scheduler; n8n updates | UI, operations | Supabase |
 | Source candidate | Discovery adapter | Normalization stages | Workflow execution only until accepted |
 | Accepted source and evidence | Research Engine | All intelligence engines, UI | Supabase |
+| Personalization profile and feed references | Application and ranking service | Application, UI | Supabase |
 | Signal and observation | Intelligence engines | Pattern engine, UI | Supabase |
 | Pattern | Pattern engine | Hypothesis engine, UI | Supabase |
 | Hypothesis | Engine or user | Validation engine, UI | Supabase |
@@ -93,6 +99,8 @@ Consume accepted evidence packs and write versioned analytical outputs. Each eng
 Synchronous operations should normally finish in less than a few seconds: authentication, configuration reads and writes, feed queries, saving an item, editing a hypothesis, and requesting a background job.
 
 Asynchronous operations include source collection, extraction, intelligence analysis, pattern recomputation, validation, and brief generation. The API returns a job or run identifier immediately. The UI polls or subscribes to status and shows partial, failed, and stale states.
+
+Scheduled public collection follows [Shared Domain Collection and Personalization](shared_domain_collection_and_personalization.md): two configurable slots per active domain each day, skipped when no workspace subscribes, with downstream workspace ranking over the shared corpus. Private workspace material remains on a separate tenant-owned path.
 
 ## Event and job convention
 

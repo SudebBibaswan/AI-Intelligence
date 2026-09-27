@@ -23,6 +23,7 @@ Resolve a conflict by updating all affected documents in the same pull request. 
 | [MVP Scope and Acceptance Criteria](product/mvp_scope_and_acceptance.md) | Product, design, engineering | What the first usable release includes |
 | [Product Vocabulary](product/product_vocabulary.md) | Entire team | Exact meanings of intelligence terms |
 | [System Architecture](architecture/system_architecture.md) | Backend, AI, frontend | Service boundaries and data flow |
+| [Shared Domain Collection and Personalization](architecture/shared_domain_collection_and_personalization.md) | Product, backend, AI, n8n, frontend | Twice-daily shared research, seven-domain scope, corpus reuse, and explainable multi-factor feed ranking |
 | [Database Schema](architecture/database_schema.md) | Backend, frontend, n8n | Canonical tables, keys, states, and lineage |
 | [Supabase Setup and Connection](architecture/supabase_setup_and_connection.md) | Backend, frontend, n8n | Apply migrations, verify RLS, and connect each component with the correct key |
 | [API and Frontend Data Contracts](architecture/api_and_frontend_contracts.md) | Frontend, backend | Stable read and write interfaces |

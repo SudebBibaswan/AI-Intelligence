@@ -392,13 +392,26 @@ Cross-system status ledger for background work. Columns: `id`, `workspace_id`, `
 
 Append-only record of security-sensitive user and service actions. Columns: `id`, `workspace_id`, `actor_type`, `actor_id`, `action`, `target_type`, `target_id`, `request_id`, `metadata`, `created_at`.
 
+## n8n research runtime functions
+
+Migration `202609270007_n8n_research_runtime.sql` exposes four Data API functions to the `service_role` only:
+
+| Function | Purpose |
+|---|---|
+| `n8n_claim_research_run` | Atomically changes one matching queued run to `discovering` and returns its trusted configuration. |
+| `n8n_set_research_run_status` | Applies forward-only stage or terminal status changes with metrics and sanitized error patches. |
+| `n8n_record_research_source` | Enforces workspace lineage, canonical/content deduplication, discovery ledger persistence, and review-only acceptance rules. |
+| `n8n_record_research_evidence` | Persists replay-safe evidence, enforces source/run workspace lineage, and downgrades model verification in review-only mode. |
+
+`anon` and `authenticated` cannot execute these functions. A Supabase secret key used by n8n can call them and therefore must remain in the n8n credential store. See [How to Build the First n8n Research Agent](../operations/how_to_build_first_n8n_research_agent.md).
+
 ## Essential indexes
 
 - Every tenant table: `(workspace_id, created_at desc)`.
 - Membership: `(user_id, workspace_id)`.
 - Research runs: `(workspace_domain_id, created_at desc)` and partial index on active statuses.
 - Sources: unique `(workspace_id, canonical_url)` and partial `(workspace_id, content_hash)`.
-- Evidence: `(source_id)`, `(research_run_id)`, and full-text or vector index only after benchmarked need.
+- Evidence: `(source_id)`, `(research_run_id)`, replay guard on the source/extractor/claim/excerpt hash, and full-text or vector index only after benchmarked need.
 - Entities: `(workspace_id, entity_type, normalized_name)` plus GIN on `external_ids` only if queried.
 - Signals: `(workspace_domain_id, event_at desc)`, `(workspace_id, status, importance_score desc)`.
 - Patterns and hypotheses: `(workspace_domain_id, status, updated_at desc)`.
