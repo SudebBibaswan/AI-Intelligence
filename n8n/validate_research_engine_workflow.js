@@ -36,7 +36,8 @@ for (const [from, outputs] of Object.entries(workflow.connections ?? {})) {
   }
 }
 
-const reachable = new Set(['Manual Trigger']);
+const triggerRoots = ['Manual Trigger', 'Scheduled Run Trigger'];
+const reachable = new Set(triggerRoots);
 let changed = true;
 while (changed) {
   changed = false;
@@ -55,11 +56,14 @@ while (changed) {
 
 for (const node of workflow.nodes ?? []) {
   if (node.type !== 'n8n-nodes-base.stickyNote' && !reachable.has(node.name)) {
-    fail(`Executable node is unreachable from Manual Trigger: ${node.name}`);
+    fail(`Executable node is unreachable from a supported trigger: ${node.name}`);
   }
 }
 
 const requiredNodes = [
+  'Scheduled Run Trigger',
+  'Prepare Scheduled Research Request',
+  'Run Already Queued?',
   'OpenAI Query Planner',
   'Tavily Search',
   'Candidate Loop - One at a Time',
@@ -73,6 +77,16 @@ const requiredNodes = [
   'Finalize Research Run',
 ];
 for (const name of requiredNodes) if (!names.has(name)) fail(`Required node missing: ${name}`);
+
+if (!(workflow.connections?.['Scheduled Run Trigger']?.main?.[0] ?? []).some((item) => item.node === 'Prepare Scheduled Research Request')) {
+  fail('Scheduled trigger is not connected to scheduled input preparation');
+}
+if (!(workflow.connections?.['Run Already Queued?']?.main?.[0] ?? []).some((item) => item.node === 'Claim Research Run')) {
+  fail('Existing scheduled runs do not bypass run creation');
+}
+if (!(workflow.connections?.['Run Already Queued?']?.main?.[1] ?? []).some((item) => item.node === 'Create Research Run')) {
+  fail('Manual runs do not reach run creation');
+}
 
 const loopOutputs = workflow.connections?.['Candidate Loop - One at a Time']?.main ?? [];
 if (!loopOutputs[0]?.some((item) => item.node === 'Summarize Research Run')) fail('Loop done output is not connected to finalization');

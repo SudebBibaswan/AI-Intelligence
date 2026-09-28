@@ -8,7 +8,7 @@ This guide activates the database scheduler introduced by migration `20260927000
 - `supabase/verify.sql` passes.
 - At least one real Auth user and matching `profiles` row exists.
 - n8n has the existing Supabase service credential.
-- The existing Research Engine can process a supplied `research_run_id` and `request_id`. Until that input handoff is added, keep the scheduler workflow inactive.
+- `n8n/research_engine_complete.json` and `n8n/shared_domain_scheduler.json` have been imported.
 
 ## Bootstrap the service workspace once
 
@@ -41,32 +41,26 @@ Expected response:
 
 The function is idempotent. Repeating it repairs missing collector mappings instead of creating another service workspace.
 
-## Build the n8n scheduler workflow
+## Import the n8n scheduler workflow
 
-Create a workflow named `RE 01 Shared Domain Scheduler`.
+Import `n8n/shared_domain_scheduler.json`. It creates the workflow `RE 01 Shared Domain Scheduler`.
 
-1. Add a Schedule Trigger that runs hourly at minute 5.
-2. Add an HTTP Request node named `Queue Eligible Domain Runs`.
-3. Configure:
-   - Method: `POST`
-   - URL: `YOUR_SUPABASE_URL/rest/v1/rpc/n8n_schedule_domain_collection_runs`
-   - Authentication: existing Supabase service credential
-   - JSON body:
+Complete these one-time mappings:
 
-     ```json
-     {
-       "p_slot_start": "={{ $now.startOf('hour').toISO() }}"
-     }
-     ```
+1. In `Scheduler Configuration`, replace the Supabase project URL.
+2. Re-select the existing `supabase` credential if either HTTP node is red.
+3. In `Execute Research Engine`, select the imported `Research Engine` workflow.
+4. Publish/activate the Research Engine first.
+5. Manually execute the scheduler once, then publish it.
 
-4. Split the returned array into items.
-5. Ignore rows where `created` is `false`; that slot was already queued.
-6. For each new row, execute the Research Engine with:
-   - `research_run_id`
-   - `request_id`
-   - `collector_workspace_id` as `workspace_id`
-   - `collector_workspace_domain_id` as `workspace_domain_id`
-   - `domain_key`
+The imported workflow already:
+
+- checks hourly at minute 5;
+- calls `n8n_schedule_domain_collection_runs`;
+- ignores rows where `created=false`;
+- loads each domain's predefined profile from `domains.default_config`;
+- hands the existing run/request IDs to the Research Engine;
+- processes domains sequentially to control provider concurrency and cost.
 
 The RPC returns no rows outside configured UTC slot hours. Hourly triggering provides recovery from a short n8n outage without creating additional runs.
 

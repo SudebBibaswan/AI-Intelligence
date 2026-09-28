@@ -34,6 +34,36 @@ const prepared = runCode('Validate and Prepare Run', initial)[0].json;
 assert.match(prepared.research_run_id, /^[0-9a-f-]{36}$/i);
 assert.equal(prepared.run_payload.status, 'queued');
 assert.equal(prepared.run_payload.config_snapshot.automation_mode, 'review_only');
+assert.equal(prepared.run_already_created, false);
+
+const scheduledInput = runCode('Prepare Scheduled Research Request', {
+  supabase_url: 'https://example.supabase.co',
+  research_run_id: '44444444-4444-4444-a444-444444444444',
+  request_id: '55555555-5555-4555-a555-555555555555',
+  domain_id: '66666666-6666-4666-a666-666666666666',
+  domain_key: 'cybersecurity',
+  domain_name: 'Cybersecurity',
+  domain_description: 'Cybersecurity products, threats, regulation, and capital flows.',
+  domain_default_config: {
+    profile_version: '1.0.0',
+    topics: ['cloud-security', 'funding-and-ma'],
+    query_focus: ['product releases', 'funding and acquisitions'],
+    geographies: ['global', 'india'],
+  },
+  domain_config_version: 1,
+  collector_workspace_id: '77777777-7777-4777-a777-777777777777',
+  collector_workspace_domain_id: '88888888-8888-4888-a888-888888888888',
+  subscriber_count: 3,
+  slot_start: '2026-09-27T00:00:00.000Z',
+})[0].json;
+
+const scheduledPrepared = runCode('Validate and Prepare Run', scheduledInput)[0].json;
+assert.equal(scheduledPrepared.research_run_id, scheduledInput.research_run_id);
+assert.equal(scheduledPrepared.request_id, scheduledInput.request_id);
+assert.equal(scheduledPrepared.run_already_created, true);
+assert.equal(scheduledPrepared.run_payload.trigger_type, 'schedule');
+assert.equal(scheduledPrepared.config.domain_key, 'cybersecurity');
+assert.match(scheduledPrepared.config.objective, /funding and acquisitions/);
 
 const plannerResponse = {
   id: 'resp_plan_test',

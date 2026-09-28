@@ -3,131 +3,71 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## Research Engine — import setup\n\n1. Open **Research Request and Limits** and replace the three `REPLACE_...` values.\n2. If any credential is red, re-select your existing credential once:\n   - `supabase`\n   - `openai`\n   - `bearer auth for tavily`\n   - `firecrawl`\n3. Run the manual path once with limits `3 queries / 10 candidates / 5 evidence items`.\n4. Confirm rows in `research_runs`, `sources`, `research_run_sources`, `evidence`, and `llm_usage`.\n5. Shared scheduling is handled only by **RE 01 Shared Domain Scheduler**, which enters through **Scheduled Run Trigger** and reuses the queued run ID.",
-        "width": 760,
+        "content": "## Research Engine — import setup\n\n1. Open **Research Request and Limits** and replace the three `REPLACE_...` values.\n2. If any credential is red, re-select your existing credential once:\n   - `supabase`\n   - `openai`\n   - `bearer auth for tavily`\n   - `firecrawl` (Header Auth containing `Authorization: Bearer ...`)\n3. Keep the workflow inactive. Run manually with limits `3 queries / 10 candidates / 5 evidence items`.\n4. Confirm rows in `research_runs`, `sources`, `research_run_sources`, `evidence`, and `llm_usage`.\n5. Do not add a schedule until the review-only output passes evaluation.",
         "height": 430,
+        "width": 760,
         "color": 4
       },
-      "id": "a2ffa2b1-cc03-48e6-a852-670e4fd0d6ab",
+      "id": "eb9f7d15-c251-43fb-accb-b27710013ee1",
       "name": "SETUP - READ FIRST",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -1180,
-        -620
+        288,
+        -96
       ]
     },
     {
       "parameters": {
         "content": "## What this workflow actually does\n\n**Run control** → creates and atomically claims a Supabase research run.\n\n**Query planning** → bounded OpenAI Structured Output with deterministic fallback.\n\n**Discovery** → Tavily searches all planned queries; candidates are canonicalized and deduplicated across queries.\n\n**Candidate loop** → one URL at a time, with relevance gates, existing-source lookup, Firecrawl extraction, quality checks, and SHA-256 hashing.\n\n**Evidence** → bounded OpenAI extraction; excerpts are deterministically checked against source text before persistence.\n\n**Persistence** → service-only Supabase RPCs enforce lineage, replay safety, and review-only status.\n\n**Finalization** → metrics and terminal state are written to `research_runs`.",
-        "width": 900,
         "height": 430,
+        "width": 900,
         "color": 5
       },
-      "id": "21fa0850-f4f2-4717-aaa1-5eedb94161ab",
+      "id": "494a0192-3424-4da3-8ecf-94556eb4d164",
       "name": "PIPELINE MAP",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -380,
-        -620
+        1088,
+        -96
       ]
     },
     {
       "parameters": {},
-      "id": "f14a1919-de65-46e3-a83f-ca4db3b2090c",
+      "id": "af213715-ad4b-422e-8c2c-9647a173a344",
       "name": "Manual Trigger",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        -1120,
-        0
+        352,
+        528
       ]
     },
     {
       "parameters": {
-        "inputSource": "passthrough"
+        "jsCode": "// EDIT ONLY THIS NODE for a manual research run.\n// Credentials remain in n8n's credential store and are never placed here.\n\nconst now = new Date();\nconst from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);\n\nreturn [{\n  json: {\n    config: {\n      supabase_url: 'https://jaeltkzfjgrzgxgzxlfs.supabase.co',\n      workspace_id: 'a51b8277-4cd5-4f8a-9ffd-4ddbe56683da',\n      workspace_domain_id: '11068f00-2e6b-462c-b455-c69384e5e8a8',\n      domain_key: 'artificial-intelligence',\n      topic: 'AI agents, model infrastructure, funding, product launches, safety and regulation',\n      objective: 'Find material, current, source-grounded developments that may become evidence for intelligence analysis.',\n      geographies: [],\n      entities: [],\n      preferred_domains: [],\n      blocked_domains: [\n        'pinterest.com',\n        'quora.com',\n        'medium.com'\n      ],\n      date_from: from.toISOString(),\n      date_to: now.toISOString(),\n      automation_mode: 'review_only',\n      query_model: 'gpt-6-luna',\n      evidence_model: 'gpt-6-luna',\n      prompt_version: 'research-evidence-v1.0.0',\n      query_prompt_version: 'research-query-plan-v1.0.0',\n      contract_version: '1.0.0',\n      engine_version: 'research-engine-v1.0.0',\n      limits: {\n        max_queries: 3,\n        results_per_query: 5,\n        max_candidates: 10,\n        max_source_chars: 24000,\n        min_content_chars: 700,\n        max_evidence_per_source: 5,\n        max_openai_output_tokens: 1600,\n        max_estimated_openai_cost_usd: 0.10\n      },\n      thresholds: {\n        min_relevance: 0.45,\n        min_source_quality: 0.40,\n        min_evidence_confidence: 0.55\n      },\n      pricing_per_million_tokens: {\n        input: 0.10,\n        output: 0.50\n      }\n    }\n  }\n}];"
       },
-      "id": "6a39c7b7-cb6e-43af-a342-fdab050412ea",
-      "name": "Scheduled Run Trigger",
-      "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1.1,
-      "position": [
-        -1120,
-        220
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "// EDIT ONLY THIS NODE for a manual research run.\n// Credentials remain in n8n's credential store and are never placed here.\n\nconst now = new Date();\nconst from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);\n\nreturn [{\n  json: {\n    config: {\n      supabase_url: 'https://REPLACE_PROJECT_REF.supabase.co',\n      workspace_id: 'REPLACE_WITH_WORKSPACE_UUID',\n      workspace_domain_id: 'REPLACE_WITH_WORKSPACE_DOMAIN_UUID',\n      domain_key: 'core-ai-it-infrastructure',\n      topic: 'AI agents, model infrastructure, funding, product launches, safety and regulation',\n      objective: 'Find material, current, source-grounded developments that may become evidence for intelligence analysis.',\n      geographies: [],\n      entities: [],\n      preferred_domains: [],\n      blocked_domains: [\n        'pinterest.com',\n        'quora.com',\n        'medium.com'\n      ],\n      date_from: from.toISOString(),\n      date_to: now.toISOString(),\n      automation_mode: 'review_only',\n      query_model: 'gpt-6-luna',\n      evidence_model: 'gpt-6-luna',\n      prompt_version: 'research-evidence-v1.0.0',\n      query_prompt_version: 'research-query-plan-v1.0.0',\n      contract_version: '1.0.0',\n      engine_version: 'research-engine-v1.0.0',\n      limits: {\n        max_queries: 3,\n        results_per_query: 5,\n        max_candidates: 10,\n        max_source_chars: 24000,\n        min_content_chars: 700,\n        max_evidence_per_source: 5,\n        max_openai_output_tokens: 1600,\n        max_estimated_openai_cost_usd: 0.10\n      },\n      thresholds: {\n        min_relevance: 0.45,\n        min_source_quality: 0.40,\n        min_evidence_confidence: 0.55\n      },\n      pricing_per_million_tokens: {\n        input: 0.10,\n        output: 0.50\n      }\n    }\n  }\n}];"
-      },
-      "id": "3c24f2c4-16e9-4b19-a0cd-943640ea2edc",
+      "id": "9834f34b-b67e-4b63-b5ce-ba87d4cce678",
       "name": "Research Request and Limits",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -900,
-        0
+        576,
+        528
       ]
     },
     {
       "parameters": {
-        "jsCode": "// Input is supplied only by RE 01 Shared Domain Scheduler.\n// The scheduler has already created the queued research_runs row.\n\nconst input = $input.first().json;\nconst profile = input.domain_default_config ?? {};\nconst schedule = input.schedule_config ?? {};\nconst now = new Date();\nconst from = new Date(now.getTime() - 14 * 60 * 60 * 1000);\n\nconst topics = Array.isArray(profile.topics) ? profile.topics : [];\nconst queryFocus = Array.isArray(profile.query_focus) ? profile.query_focus : [];\nconst geographies = Array.isArray(profile.geographies) ? profile.geographies : ['global'];\n\nreturn [{\n  json: {\n    existing_research_run: true,\n    research_run_id: input.research_run_id,\n    request_id: input.request_id,\n    schedule_metadata: {\n      domain_id: input.domain_id,\n      slot_start: input.slot_start,\n      subscriber_count: input.subscriber_count,\n      profile_version: profile.profile_version ?? '1.0.0',\n      domain_config_version: input.domain_config_version ?? 1\n    },\n    config: {\n      supabase_url: input.supabase_url,\n      workspace_id: input.workspace_id ?? input.collector_workspace_id,\n      workspace_domain_id: input.workspace_domain_id ?? input.collector_workspace_domain_id,\n      domain_key: input.domain_key,\n      topic: [input.domain_name, input.domain_description, ...topics].filter(Boolean).join('; '),\n      objective: queryFocus.length\n        ? 'Find current, primary-source developments for: ' + queryFocus.join('; ') + '. Emphasize capital flows, adoption, measurable outcomes, and material risks.'\n        : 'Find current, source-grounded developments, capital flows, adoption signals, and material risks for this domain.',\n      geographies,\n      entities: [],\n      preferred_domains: Array.isArray(schedule.preferred_domains) ? schedule.preferred_domains : [],\n      blocked_domains: Array.isArray(schedule.blocked_domains)\n        ? schedule.blocked_domains\n        : ['pinterest.com', 'quora.com', 'medium.com'],\n      date_from: from.toISOString(),\n      date_to: now.toISOString(),\n      automation_mode: 'review_only',\n      query_model: schedule.query_model ?? 'gpt-6-luna',\n      evidence_model: schedule.evidence_model ?? 'gpt-6-luna',\n      prompt_version: 'research-evidence-v1.0.0',\n      query_prompt_version: 'research-query-plan-v1.0.0',\n      contract_version: '1.0.0',\n      engine_version: input.engine_version ?? 'research-engine-v1.0.0',\n      limits: {\n        max_queries: schedule.max_queries ?? 3,\n        results_per_query: schedule.results_per_query ?? 5,\n        max_candidates: schedule.max_candidates ?? 10,\n        max_source_chars: schedule.max_source_chars ?? 24000,\n        min_content_chars: schedule.min_content_chars ?? 700,\n        max_evidence_per_source: schedule.max_evidence_per_source ?? 5,\n        max_openai_output_tokens: schedule.max_openai_output_tokens ?? 1600,\n        max_estimated_openai_cost_usd: schedule.max_estimated_openai_cost_usd ?? 0.10\n      },\n      thresholds: {\n        min_relevance: schedule.min_relevance ?? 0.45,\n        min_source_quality: schedule.min_source_quality ?? 0.40,\n        min_evidence_confidence: schedule.min_evidence_confidence ?? 0.55\n      },\n      pricing_per_million_tokens: {\n        input: 0.10,\n        output: 0.50\n      }\n    }\n  },\n  pairedItem: { item: 0 }\n}];"
+        "jsCode": "const input = $input.first().json;\nconst config = input.config ?? {};\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\n\nconst uuid = () => {\n  const hex = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16));\n  hex[12] = '4';\n  hex[16] = (8 + Math.floor(Math.random() * 4)).toString(16);\n  return hex.slice(0, 8).join('') + '-' + hex.slice(8, 12).join('') + '-' + hex.slice(12, 16).join('') + '-' + hex.slice(16, 20).join('') + '-' + hex.slice(20).join('');\n};\n\nconst requiredStrings = ['supabase_url', 'workspace_id', 'workspace_domain_id', 'domain_key', 'topic', 'objective'];\nfor (const key of requiredStrings) {\n  if (typeof config[key] !== 'string' || !config[key].trim() || config[key].includes('REPLACE_')) {\n    throw new Error('CONFIG_REQUIRED_' + key.toUpperCase());\n  }\n}\n\nif (!/^https:\\/\\/[a-z0-9-]+\\.supabase\\.co\\/?$/i.test(config.supabase_url)) {\n  throw new Error('INVALID_SUPABASE_URL');\n}\nif (!uuidPattern.test(config.workspace_id) || !uuidPattern.test(config.workspace_domain_id)) {\n  throw new Error('INVALID_WORKSPACE_UUID');\n}\nif (config.automation_mode !== 'review_only') {\n  throw new Error('FIRST_WORKFLOW_MUST_REMAIN_REVIEW_ONLY');\n}\n\nconfig.supabase_url = config.supabase_url.replace(/\\/$/, '');\nconfig.limits.max_queries = Math.max(1, Math.min(5, Number(config.limits.max_queries || 3)));\nconfig.limits.results_per_query = Math.max(1, Math.min(10, Number(config.limits.results_per_query || 5)));\nconfig.limits.max_candidates = Math.max(1, Math.min(20, Number(config.limits.max_candidates || 10)));\nconfig.limits.max_evidence_per_source = Math.max(1, Math.min(8, Number(config.limits.max_evidence_per_source || 5)));\nconfig.limits.max_source_chars = Math.max(4000, Math.min(50000, Number(config.limits.max_source_chars || 24000)));\n\nconst research_run_id = uuid();\nconst request_id = uuid();\nconst created_at = new Date().toISOString();\n\nreturn [{\n  json: {\n    config,\n    research_run_id,\n    request_id,\n    created_at,\n    run_payload: {\n      id: research_run_id,\n      workspace_id: config.workspace_id,\n      workspace_domain_id: config.workspace_domain_id,\n      trigger_type: 'manual',\n      status: 'queued',\n      request_id,\n      idempotency_key: 'n8n:' + research_run_id,\n      contract_version: config.contract_version,\n      config_snapshot: config,\n      metrics: {\n        engine_version: config.engine_version,\n        started_from: 'n8n-manual-import-v1'\n      },\n      error_summary: {}\n    }\n  }\n}];"
       },
-      "id": "a387e203-0e03-49fc-a433-ebe6683a968c",
-      "name": "Prepare Scheduled Research Request",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -900,
-        220
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst config = input.config ?? {};\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\n\nconst uuid = () => {\n  const hex = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16));\n  hex[12] = '4';\n  hex[16] = (8 + Math.floor(Math.random() * 4)).toString(16);\n  return hex.slice(0, 8).join('') + '-' + hex.slice(8, 12).join('') + '-' + hex.slice(12, 16).join('') + '-' + hex.slice(16, 20).join('') + '-' + hex.slice(20).join('');\n};\n\nconst requiredStrings = ['supabase_url', 'workspace_id', 'workspace_domain_id', 'domain_key', 'topic', 'objective'];\nfor (const key of requiredStrings) {\n  if (typeof config[key] !== 'string' || !config[key].trim() || config[key].includes('REPLACE_')) {\n    throw new Error('CONFIG_REQUIRED_' + key.toUpperCase());\n  }\n}\n\nif (!/^https:\\/\\/[a-z0-9-]+\\.supabase\\.co\\/?$/i.test(config.supabase_url)) {\n  throw new Error('INVALID_SUPABASE_URL');\n}\nif (!uuidPattern.test(config.workspace_id) || !uuidPattern.test(config.workspace_domain_id)) {\n  throw new Error('INVALID_WORKSPACE_UUID');\n}\nif (config.automation_mode !== 'review_only') {\n  throw new Error('FIRST_WORKFLOW_MUST_REMAIN_REVIEW_ONLY');\n}\n\nconfig.supabase_url = config.supabase_url.replace(/\\/$/, '');\nconfig.limits = config.limits ?? {};\nconfig.thresholds = config.thresholds ?? {};\nconfig.pricing_per_million_tokens = config.pricing_per_million_tokens ?? {};\nconfig.limits.max_queries = Math.max(1, Math.min(5, Number(config.limits.max_queries || 3)));\nconfig.limits.results_per_query = Math.max(1, Math.min(10, Number(config.limits.results_per_query || 5)));\nconfig.limits.max_candidates = Math.max(1, Math.min(20, Number(config.limits.max_candidates || 10)));\nconfig.limits.max_evidence_per_source = Math.max(1, Math.min(8, Number(config.limits.max_evidence_per_source || 5)));\nconfig.limits.max_source_chars = Math.max(4000, Math.min(50000, Number(config.limits.max_source_chars || 24000)));\n\nconst run_already_created = input.existing_research_run === true;\nconst research_run_id = run_already_created ? input.research_run_id : uuid();\nconst request_id = run_already_created ? input.request_id : uuid();\n\nif (!uuidPattern.test(research_run_id) || !uuidPattern.test(request_id)) {\n  throw new Error('INVALID_RESEARCH_RUN_OR_REQUEST_UUID');\n}\n\nconst created_at = new Date().toISOString();\n\nreturn [{\n  json: {\n    config,\n    research_run_id,\n    request_id,\n    run_already_created,\n    schedule_metadata: input.schedule_metadata ?? null,\n    created_at,\n    run_payload: {\n      id: research_run_id,\n      workspace_id: config.workspace_id,\n      workspace_domain_id: config.workspace_domain_id,\n      trigger_type: run_already_created ? 'schedule' : 'manual',\n      status: 'queued',\n      request_id,\n      idempotency_key: 'n8n:' + research_run_id,\n      contract_version: config.contract_version,\n      config_snapshot: config,\n      metrics: {\n        engine_version: config.engine_version,\n        started_from: run_already_created ? 'shared-domain-scheduler-v1' : 'n8n-manual-import-v1'\n      },\n      error_summary: {}\n    }\n  }\n}];"
-      },
-      "id": "b4bd5654-e6b5-4f79-a313-be8403e6ef53",
+      "id": "7f41b451-e816-4394-b1d6-7ce4c1c5ce12",
       "name": "Validate and Prepare Run",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -660,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "id": "0e5845fb-54ed-4477-aee8-cb09725a4d17",
-              "leftValue": "={{ $json.run_already_created === true }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "f57b5429-8ecc-4660-a5af-b4f4dcd1c5eb",
-      "name": "Run Already Queued?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        -410,
-        0
+        816,
+        528
       ]
     },
     {
@@ -156,23 +96,23 @@
           "timeout": 30000
         }
       },
-      "id": "9bc7ec86-dca4-4da2-aa3e-3a9c8e6a6a47",
+      "id": "6ced9c5c-4d29-45e2-aae9-75aae4b2eb7c",
       "name": "Create Research Run",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -160,
-        100
+        1072,
+        528
       ],
-      "credentials": {
-        "supabaseApi": {
-          "id": "REPLACE_WITH_SUPABASE_CREDENTIAL_ID",
-          "name": "supabase"
-        }
-      },
       "retryOnFail": true,
       "maxTries": 2,
-      "waitBetweenTries": 1000
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      }
     },
     {
       "parameters": {
@@ -200,35 +140,35 @@
           "timeout": 30000
         }
       },
-      "id": "98b67204-7c4f-40a8-afa7-7bffa35f0736",
+      "id": "60747970-12d6-448b-89e6-9ccd1eb7b07d",
       "name": "Claim Research Run",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        80,
-        0
+        1312,
+        528
       ],
-      "credentials": {
-        "supabaseApi": {
-          "id": "REPLACE_WITH_SUPABASE_CREDENTIAL_ID",
-          "name": "supabase"
-        }
-      },
       "retryOnFail": true,
       "maxTries": 2,
-      "waitBetweenTries": 1000
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      }
     },
     {
       "parameters": {
         "jsCode": "const claimed = $input.first().json;\nconst seed = $('Validate and Prepare Run').first().json;\nconst config = seed.config;\n\nconst schema = {\n  type: 'object',\n  additionalProperties: false,\n  properties: {\n    queries: {\n      type: 'array',\n      minItems: 1,\n      maxItems: config.limits.max_queries,\n      items: {\n        type: 'object',\n        additionalProperties: false,\n        properties: {\n          query: { type: 'string' },\n          intent: { type: 'string', enum: ['current_news', 'official_sources', 'research_and_technical', 'market_activity', 'regulation_and_safety'] },\n          recency_days: { type: 'integer', minimum: 1, maximum: 365 },\n          result_limit: { type: 'integer', minimum: 1, maximum: 10 }\n        },\n        required: ['query', 'intent', 'recency_days', 'result_limit']\n      }\n    }\n  },\n  required: ['queries']\n};\n\nconst planningContext = {\n  domain: config.domain_key,\n  topic: config.topic,\n  objective: config.objective,\n  geographies: config.geographies,\n  entities: config.entities,\n  preferred_domains: config.preferred_domains,\n  date_from: config.date_from,\n  date_to: config.date_to,\n  maximum_queries: config.limits.max_queries,\n  maximum_results_per_query: config.limits.results_per_query\n};\n\nreturn [{\n  json: {\n    ...seed,\n    claimed_run: claimed,\n    openai_request: {\n      model: config.query_model,\n      instructions: 'Create a compact web-search plan for a research intelligence pipeline. Queries must be non-overlapping, concrete, time-aware, and optimized for source discovery rather than answering the question. Include official or primary-source language where useful. Do not invent entities. Return only the required structured output.',\n      input: [{\n        role: 'user',\n        content: [{ type: 'input_text', text: JSON.stringify(planningContext) }]\n      }],\n      text: {\n        format: {\n          type: 'json_schema',\n          name: 'research_query_plan',\n          strict: true,\n          schema\n        }\n      },\n      max_output_tokens: 1000,\n      store: false\n    }\n  }\n}];"
       },
-      "id": "8537f192-c373-45da-a5cf-ecf068d69826",
+      "id": "5a196f48-183c-43e5-8082-11264351edd4",
       "name": "Build Query Planner Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        320,
-        0
+        1552,
+        528
       ]
     },
     {
@@ -253,37 +193,37 @@
           "timeout": 60000
         }
       },
-      "id": "3d06cdb8-cfc4-4b23-ace4-34b4c4f935ae",
+      "id": "ec45353e-0f83-4a6c-99d0-72c1e741a7d5",
       "name": "OpenAI Query Planner",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        330,
-        0
+        1808,
+        528
       ],
-      "credentials": {
-        "openAiApi": {
-          "id": "REPLACE_WITH_OPENAI_CREDENTIAL_ID",
-          "name": "openai"
-        }
-      },
       "retryOnFail": true,
       "maxTries": 2,
       "waitBetweenTries": 1500,
       "alwaysOutputData": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "7a0hdZ68ejgk6EnD",
+          "name": "OpenAI account"
+        }
+      },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "jsCode": "const response = $input.first().json ?? {};\nconst seed = $('Validate and Prepare Run').first().json;\nconst config = seed.config;\n\nconst uuid = () => {\n  const h = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16));\n  h[12] = '4'; h[16] = (8 + Math.floor(Math.random() * 4)).toString(16);\n  return h.slice(0,8).join('') + '-' + h.slice(8,12).join('') + '-' + h.slice(12,16).join('') + '-' + h.slice(16,20).join('') + '-' + h.slice(20).join('');\n};\n\nconst outputText = (response.output ?? [])\n  .flatMap((item) => item.content ?? [])\n  .find((content) => content.type === 'output_text')?.text;\n\nlet parsed = null;\nlet plannerError = null;\ntry {\n  parsed = outputText ? JSON.parse(outputText) : null;\n} catch (error) {\n  plannerError = 'QUERY_PLAN_INVALID_JSON';\n}\n\nconst allowedIntents = new Set(['current_news', 'official_sources', 'research_and_technical', 'market_activity', 'regulation_and_safety']);\nlet queries = Array.isArray(parsed?.queries) ? parsed.queries : [];\nqueries = queries\n  .filter((q) => q && typeof q.query === 'string' && q.query.trim())\n  .map((q) => ({\n    query: q.query.trim().slice(0, 300),\n    intent: allowedIntents.has(q.intent) ? q.intent : 'current_news',\n    recency_days: Math.max(1, Math.min(365, Number(q.recency_days || 30))),\n    result_limit: Math.max(1, Math.min(config.limits.results_per_query, Number(q.result_limit || config.limits.results_per_query)))\n  }));\n\nif (!queries.length) {\n  plannerError = plannerError || 'QUERY_PLANNER_FALLBACK_USED';\n  const topic = config.topic;\n  queries = [\n    { query: topic + ' latest news announcements', intent: 'current_news', recency_days: 30, result_limit: config.limits.results_per_query },\n    { query: topic + ' official release funding acquisition partnership', intent: 'official_sources', recency_days: 60, result_limit: config.limits.results_per_query },\n    { query: topic + ' research paper benchmark technical report', intent: 'research_and_technical', recency_days: 90, result_limit: config.limits.results_per_query }\n  ].slice(0, config.limits.max_queries);\n}\n\nconst seen = new Set();\nqueries = queries.filter((q) => {\n  const key = q.query.toLowerCase().replace(/\\s+/g, ' ');\n  if (seen.has(key)) return false;\n  seen.add(key);\n  return true;\n}).slice(0, config.limits.max_queries);\n\nconst usage = response.usage ?? {};\nconst inputTokens = Number(usage.input_tokens ?? 0);\nconst outputTokens = Number(usage.output_tokens ?? 0);\nconst estimatedCost = (inputTokens * config.pricing_per_million_tokens.input + outputTokens * config.pricing_per_million_tokens.output) / 1000000;\n\nreturn [{\n  json: {\n    ...seed,\n    query_items: queries.map((query, index) => ({ ...query, query_index: index + 1 })),\n    planner_fallback_used: Boolean(plannerError),\n    planner_error_code: plannerError,\n    planner_usage: {\n      workspace_id: config.workspace_id,\n      research_run_id: seed.research_run_id,\n      request_id: uuid(),\n      workflow: 'RE 00 Research Engine',\n      agent: 'query_planner',\n      operation: 'structured_query_plan',\n      provider: 'openai',\n      model: response.model ?? config.query_model,\n      model_tier: 0,\n      input_tokens: inputTokens,\n      output_tokens: outputTokens,\n      estimated_cost_usd: Number(estimatedCost.toFixed(6)),\n      latency_ms: 0,\n      success: !plannerError,\n      error_code: plannerError,\n      prompt_version: config.query_prompt_version,\n      schema_version: 'query-plan-v1.0.0'\n    }\n  }\n}];"
       },
-      "id": "96505d95-3bcf-4122-a0c4-db683477e199",
+      "id": "2253a3c9-322b-48ff-8fcd-6cbbc4d168f5",
       "name": "Parse Query Plan",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        580,
-        0
+        2048,
+        528
       ]
     },
     {
@@ -312,114 +252,65 @@
           "timeout": 30000
         }
       },
-      "id": "657b6d12-8186-4ac3-a20e-e9879eb848cc",
+      "id": "bf633023-5be7-4789-8430-c7d5d9b92065",
       "name": "Record Planner Usage",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        830,
-        0
+        2304,
+        528
       ],
-      "credentials": {
-        "supabaseApi": {
-          "id": "REPLACE_WITH_SUPABASE_CREDENTIAL_ID",
-          "name": "supabase"
-        }
-      },
       "retryOnFail": true,
       "maxTries": 2,
       "waitBetweenTries": 1000,
-      "onError": "continueRegularOutput",
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "jsCode": "const plan = $('Parse Query Plan').first().json;\nreturn plan.query_items.map((query, index) => ({\n  json: {\n    config: plan.config,\n    research_run_id: plan.research_run_id,\n    request_id: plan.request_id,\n    ...query\n  },\n  pairedItem: { item: 0 }\n}));"
       },
-      "id": "6bef056c-0382-4c24-a476-759a3a0a3745",
+      "id": "a768b23f-3e72-411c-970c-dd827a3840ed",
       "name": "Expand Queries",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1080,
-        0
+        2560,
+        528
       ]
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://api.tavily.com/search",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpBearerAuth",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ query: $json.query, topic: 'general', search_depth: 'basic', max_results: $json.result_limit, include_answer: false, include_raw_content: false, include_images: false, include_favicon: false, start_date: $json.config.date_from.slice(0, 10), end_date: $json.config.date_to.slice(0, 10) }) }}",
-        "options": {
-          "batching": {
-            "batch": {
-              "batchSize": 1,
-              "batchInterval": 750
-            }
-          },
-          "timeout": 30000
-        }
+        "jsCode": "const responses = $input.all().map(item => item.json ?? {});\nconst seed = $('Validate and Prepare Run').first().json;\nconst plan = $('Parse Query Plan').first().json;\nconst config = seed.config;\n\nconst queryItems = Array.isArray(plan.query_items)\n  ? plan.query_items\n  : [];\n\nconst normalizeText = value =>\n  String(value ?? '').trim().replace(/\\s+/g, ' ');\n\nconst queryKey = value => normalizeText(value).toLowerCase();\n\nconst queryMap = new Map(\n  queryItems.map(item => [queryKey(item.query), item])\n);\n\nconst trackingParameters = new Set([\n  'utm_source',\n  'utm_medium',\n  'utm_campaign',\n  'utm_term',\n  'utm_content',\n  'utm_id',\n  'gclid',\n  'fbclid',\n  'mc_cid',\n  'mc_eid',\n  'ref',\n  'ref_src',\n  'source'\n]);\n\nconst searchWrapperHosts = new Set([\n  'html.duckduckgo.com',\n  'duckduckgo.com',\n  'google.com',\n  'www.google.com',\n  'bing.com',\n  'www.bing.com'\n]);\n\nfunction parseHttpUrl(rawUrl) {\n  const raw = normalizeText(rawUrl);\n\n  const match = raw.match(\n    /^(https?):\\/\\/([^/?#]+)(\\/[^?#]*)?(\\?[^#]*)?(?:#.*)?$/i\n  );\n\n  if (!match) return null;\n\n  const protocol = `${match[1].toLowerCase()}:`;\n  let hostPort = match[2].toLowerCase();\n\n  // Reject URLs containing embedded credentials.\n  if (hostPort.includes('@')) return null;\n\n  if (protocol === 'https:' && hostPort.endsWith(':443')) {\n    hostPort = hostPort.slice(0, -4);\n  }\n\n  if (protocol === 'http:' && hostPort.endsWith(':80')) {\n    hostPort = hostPort.slice(0, -3);\n  }\n\n  const hostname = hostPort.replace(/:\\d+$/, '');\n\n  let pathname = match[3] || '/';\n  pathname = pathname.replace(/\\/{2,}/g, '/');\n\n  if (pathname.length > 1) {\n    pathname = pathname.replace(/\\/+$/, '');\n  }\n\n  const queryParts = (match[4] || '')\n    .replace(/^\\?/, '')\n    .split('&')\n    .filter(Boolean)\n    .filter(part => {\n      const rawKey = part.split('=')[0] || '';\n\n      let key;\n\n      try {\n        key = decodeURIComponent(rawKey).toLowerCase();\n      } catch {\n        key = rawKey.toLowerCase();\n      }\n\n      return (\n        !trackingParameters.has(key) &&\n        !key.startsWith('utm_')\n      );\n    })\n    .sort();\n\n  const query = queryParts.length\n    ? `?${queryParts.join('&')}`\n    : '';\n\n  return {\n    hostname,\n    pathname,\n    canonicalUrl: `${protocol}//${hostPort}${pathname}${query}`\n  };\n}\n\nfunction tokenize(value) {\n  return new Set(\n    String(value ?? '')\n      .toLowerCase()\n      .match(/[a-z0-9][a-z0-9-]{2,}/g) ?? []\n  );\n}\n\nfunction lexicalOverlap(query, text) {\n  const queryTokens = tokenize(query);\n  const textTokens = tokenize(text);\n\n  if (!queryTokens.size) return 0;\n\n  let matches = 0;\n\n  for (const token of queryTokens) {\n    if (textTokens.has(token)) matches++;\n  }\n\n  return Math.min(1, matches / Math.max(3, queryTokens.size));\n}\n\nfunction sourceQuality(hostname) {\n  const host = hostname.replace(/^www\\./, '');\n\n  if (\n    host.endsWith('.gov') ||\n    host.endsWith('.edu') ||\n    host.endsWith('.gov.in') ||\n    host.endsWith('europa.eu')\n  ) {\n    return 0.95;\n  }\n\n  if (\n    host === 'arxiv.org' ||\n    host === 'github.com' ||\n    host === 'who.int' ||\n    host === 'oecd.org'\n  ) {\n    return 0.88;\n  }\n\n  if (\n    (config.preferred_domains ?? []).some(\n      domain => host === domain || host.endsWith('.' + domain)\n    )\n  ) {\n    return 0.90;\n  }\n\n  if (host.includes('substack.com')) {\n    return 0.55;\n  }\n\n  return 0.65;\n}\n\nfunction determineSourceType(url, title) {\n  const host = url.hostname.replace(/^www\\./, '');\n  const text = `${title} ${url.pathname}`.toLowerCase();\n\n  if (\n    host === 'arxiv.org' ||\n    /paper|research|whitepaper|evaluation report/.test(text)\n  ) {\n    return 'paper';\n  }\n\n  if (host === 'github.com') return 'repository';\n  if (/press-release|newsroom|press_release/.test(text)) return 'press_release';\n  if (/filing|10-k|10-q|8-k/.test(text)) return 'filing';\n  if (/jobs?|careers?/.test(text)) return 'job_posting';\n  if (/youtube\\.com|youtu\\.be/.test(host)) return 'video';\n\n  return 'article';\n}\n\nconst deduplicated = new Map();\nlet providerErrors = 0;\n\nresponses.forEach((response, responseIndex) => {\n  /*\n   * Supports both:\n   * 1. Direct Tavily node: { query, results: [...] }\n   * 2. A possible nested structure: { data: { query, results: [...] } }\n   */\n  const payload =\n    response?.data && Array.isArray(response.data.results)\n      ? response.data\n      : response;\n\n  const results = Array.isArray(payload.results)\n    ? payload.results\n    : [];\n\n  const responseQuery = normalizeText(payload.query);\n\n  const queryContext =\n    queryMap.get(queryKey(responseQuery)) ??\n    queryItems[responseIndex] ??\n    {\n      query: responseQuery,\n      intent: 'current_news',\n      result_limit: config.limits.results_per_query\n    };\n\n  if (!results.length) {\n    providerErrors++;\n    return;\n  }\n\n  results.forEach((result, resultIndex) => {\n    const originalUrl = normalizeText(result.url);\n    const parsedUrl = parseHttpUrl(originalUrl);\n\n    if (!parsedUrl) return;\n\n    const canonicalUrl = parsedUrl.canonicalUrl;\n    const hostname = parsedUrl.hostname.replace(/^www\\./, '');\n\n    const configuredBlocked = (config.blocked_domains ?? []).some(\n      domain =>\n        hostname === domain ||\n        hostname.endsWith('.' + domain)\n    );\n\n    const isSearchWrapper = searchWrapperHosts.has(\n      parsedUrl.hostname.toLowerCase()\n    );\n\n    const blocked = configuredBlocked || isSearchWrapper;\n\n    const title =\n      normalizeText(result.title).slice(0, 500) ||\n      hostname;\n\n    const snippet =\n      normalizeText(\n        result.content ??\n        result.snippet ??\n        result.raw_content\n      ).slice(0, 3000);\n\n    const tavilyScore = Math.max(\n      0,\n      Math.min(1, Number(result.score ?? 0))\n    );\n\n    const lexicalScore = lexicalOverlap(\n      queryContext.query,\n      `${title} ${snippet}`\n    );\n\n    const qualityScore = sourceQuality(hostname);\n\n    const relevanceScore = Math.max(\n      0,\n      Math.min(\n        1,\n        tavilyScore * 0.65 +\n        lexicalScore * 0.20 +\n        qualityScore * 0.15\n      )\n    );\n\n    const reasonCodes = [];\n\n    if (lexicalScore >= 0.25) {\n      reasonCodes.push('TOPIC_MATCH');\n    }\n\n    if (qualityScore >= 0.85) {\n      reasonCodes.push('PRIMARY_OR_HIGH_QUALITY_SOURCE');\n    }\n\n    if (configuredBlocked) {\n      reasonCodes.push('BLOCKED_DOMAIN');\n    }\n\n    if (isSearchWrapper) {\n      reasonCodes.push('SEARCH_RESULT_WRAPPER');\n    }\n\n    if (relevanceScore < config.thresholds.min_relevance) {\n      reasonCodes.push('LOW_RELEVANCE');\n    }\n\n    const shouldExtract =\n      !blocked &&\n      relevanceScore >= config.thresholds.min_relevance &&\n      qualityScore >= config.thresholds.min_source_quality;\n\n    const candidate = {\n      candidate_id:\n        result.id ||\n        `tavily:${responseIndex}:${resultIndex}`,\n\n      config,\n\n      workspace_id: config.workspace_id,\n      workspace_domain_id: config.workspace_domain_id,\n      research_run_id: seed.research_run_id,\n      request_id: seed.request_id,\n\n      discovery_channel: 'web_search',\n      discovery_provider: 'tavily',\n      discovery_queries: [queryContext.query].filter(Boolean),\n      query: queryContext.query ?? responseQuery,\n      query_intent: queryContext.intent ?? 'current_news',\n      result_rank: resultIndex + 1,\n      discovered_at: new Date().toISOString(),\n\n      original_url: originalUrl,\n      canonical_url: canonicalUrl,\n      title,\n      snippet,\n\n      publisher: hostname,\n      author: null,\n      published_at: result.published_date ?? null,\n      language: 'en',\n\n      source_type: determineSourceType(parsedUrl, title),\n      relevance_score: Number(relevanceScore.toFixed(3)),\n      source_quality_score: Number(qualityScore.toFixed(3)),\n      tavily_score: Number(tavilyScore.toFixed(3)),\n\n      reason_codes: reasonCodes,\n      should_extract: shouldExtract,\n\n      provider_request_id: payload.request_id ?? null\n    };\n\n    const existing = deduplicated.get(canonicalUrl);\n\n    if (!existing) {\n      deduplicated.set(canonicalUrl, candidate);\n      return;\n    }\n\n    const combinedQueries = [\n      ...new Set([\n        ...(existing.discovery_queries ?? []),\n        ...candidate.discovery_queries\n      ])\n    ];\n\n    if (candidate.relevance_score > existing.relevance_score) {\n      candidate.discovery_queries = combinedQueries;\n      deduplicated.set(canonicalUrl, candidate);\n    } else {\n      existing.discovery_queries = combinedQueries;\n    }\n  });\n});\n\nlet candidates = [...deduplicated.values()]\n  .sort(\n    (a, b) =>\n      Number(b.should_extract) - Number(a.should_extract) ||\n      b.relevance_score - a.relevance_score ||\n      b.source_quality_score - a.source_quality_score\n  )\n  .slice(0, config.limits.max_candidates);\n\nif (!candidates.length) {\n  candidates = [{\n    candidate_id: 'no-results',\n    config,\n    workspace_id: config.workspace_id,\n    workspace_domain_id: config.workspace_domain_id,\n    research_run_id: seed.research_run_id,\n    request_id: seed.request_id,\n    canonical_url: null,\n    original_url: null,\n    title: 'No usable Tavily results',\n    should_extract: false,\n    reason_codes: ['NO_SEARCH_RESULTS'],\n    discovery_provider_errors: providerErrors,\n    relevance_score: 0,\n    source_quality_score: 0\n  }];\n}\n\nreturn candidates.map((candidate, index) => ({\n  json: candidate,\n  pairedItem: {\n    item: Math.min(index, responses.length - 1)\n  }\n}));"
       },
-      "id": "7f54a07f-51d1-4797-aea5-466f1039f1bf",
-      "name": "Tavily Search",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1320,
-        0
-      ],
-      "credentials": {
-        "httpBearerAuth": {
-          "id": "REPLACE_WITH_TAVILY_CREDENTIAL_ID",
-          "name": "bearer auth for tavily"
-        }
-      },
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 1200,
-      "alwaysOutputData": true,
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "const responses = $input.all().map((item) => item.json ?? {});\nconst queryItems = $('Expand Queries').all().map((item) => item.json);\nconst seed = $('Validate and Prepare Run').first().json;\nconst config = seed.config;\n\nconst tracking = new Set([\n  'utm_source','utm_medium','utm_campaign','utm_term','utm_content','utm_id',\n  'gclid','fbclid','mc_cid','mc_eid','ref','ref_src','source'\n]);\n\nfunction canonicalize(raw) {\n  try {\n    const url = new URL(String(raw ?? '').trim());\n    if (!['http:', 'https:'].includes(url.protocol)) return null;\n    url.protocol = url.protocol.toLowerCase();\n    url.hostname = url.hostname.toLowerCase();\n    url.hash = '';\n    for (const key of [...url.searchParams.keys()]) {\n      if (tracking.has(key.toLowerCase()) || key.toLowerCase().startsWith('utm_')) url.searchParams.delete(key);\n    }\n    url.searchParams.sort();\n    url.pathname = url.pathname.replace(/\\/{2,}/g, '/');\n    if (url.pathname.length > 1) url.pathname = url.pathname.replace(/\\/+$/, '');\n    if ((url.protocol === 'https:' && url.port === '443') || (url.protocol === 'http:' && url.port === '80')) url.port = '';\n    return url.toString();\n  } catch {\n    return null;\n  }\n}\n\nfunction tokenize(value) {\n  return new Set(String(value ?? '').toLowerCase().match(/[a-z0-9][a-z0-9-]{2,}/g) ?? []);\n}\n\nfunction overlapScore(query, text) {\n  const queryTokens = tokenize(query);\n  const textTokens = tokenize(text);\n  if (!queryTokens.size) return 0;\n  let matches = 0;\n  for (const token of queryTokens) if (textTokens.has(token)) matches++;\n  return Math.min(1, matches / Math.max(3, queryTokens.size));\n}\n\nfunction sourceQuality(hostname) {\n  const host = hostname.replace(/^www\\./, '');\n  if (/\\.(gov|edu)$/.test(host) || host.endsWith('.gov.in')) return 0.95;\n  if (host === 'arxiv.org' || host === 'github.com') return 0.88;\n  if (config.preferred_domains.some((domain) => host === domain || host.endsWith('.' + domain))) return 0.90;\n  if (host.includes('substack.com')) return 0.55;\n  return 0.65;\n}\n\nfunction sourceType(url, title) {\n  const host = url.hostname.replace(/^www\\./, '');\n  const path = url.pathname.toLowerCase();\n  const text = (title + ' ' + path).toLowerCase();\n  if (host === 'arxiv.org' || /paper|research|whitepaper/.test(text)) return 'paper';\n  if (host === 'github.com') return 'repository';\n  if (/press-release|newsroom|press_release/.test(text)) return 'press_release';\n  if (/filing|10-k|10-q|8-k/.test(text)) return 'filing';\n  if (/jobs?|careers?/.test(text)) return 'job_posting';\n  if (/youtube\\.com|youtu\\.be/.test(host)) return 'video';\n  return 'article';\n}\n\nconst deduped = new Map();\nlet providerErrors = 0;\n\nresponses.forEach((response, responseIndex) => {\n  const queryContext = queryItems[responseIndex] ?? queryItems[0] ?? {};\n  const results = Array.isArray(response.results) ? response.results : [];\n  if (!results.length && (response.error || response.message)) providerErrors++;\n\n  results.forEach((result, resultIndex) => {\n    const originalUrl = String(result.url ?? '').trim();\n    const canonicalUrl = canonicalize(originalUrl);\n    if (!canonicalUrl) return;\n\n    const url = new URL(canonicalUrl);\n    const host = url.hostname.replace(/^www\\./, '');\n    const blocked = config.blocked_domains.some((domain) => host === domain || host.endsWith('.' + domain));\n    const title = String(result.title ?? host).trim().slice(0, 500) || host;\n    const snippet = String(result.content ?? result.snippet ?? '').trim().slice(0, 3000);\n    const providerScore = Math.max(0, Math.min(1, Number(result.score ?? 0)));\n    const lexical = overlapScore(queryContext.query, title + ' ' + snippet);\n    const quality = sourceQuality(host);\n    const relevance = Math.max(0, Math.min(1, providerScore * 0.55 + lexical * 0.30 + quality * 0.15));\n    const reasonCodes = [];\n    if (lexical >= 0.30) reasonCodes.push('TOPIC_MATCH');\n    if (quality >= 0.85) reasonCodes.push('PRIMARY_SOURCE');\n    if (blocked) reasonCodes.push('POSSIBLE_SPAM');\n    if (relevance < config.thresholds.min_relevance) reasonCodes.push('LOW_RELEVANCE');\n\n    const candidate = {\n      candidate_id: 'candidate:' + responseIndex + ':' + resultIndex,\n      config,\n      workspace_id: config.workspace_id,\n      workspace_domain_id: config.workspace_domain_id,\n      research_run_id: seed.research_run_id,\n      request_id: seed.request_id,\n      discovery_channel: 'web_search',\n      discovery_provider: 'tavily',\n      query: queryContext.query ?? '',\n      query_intent: queryContext.intent ?? 'current_news',\n      result_rank: resultIndex + 1,\n      discovered_at: new Date().toISOString(),\n      original_url: originalUrl,\n      canonical_url: canonicalUrl,\n      title,\n      snippet,\n      publisher: null,\n      author: null,\n      published_at: result.published_date ?? null,\n      language: 'en',\n      source_type: sourceType(url, title),\n      relevance_score: Number(relevance.toFixed(3)),\n      source_quality_score: Number(quality.toFixed(3)),\n      reason_codes: reasonCodes,\n      should_extract: !blocked && relevance >= config.thresholds.min_relevance && quality >= config.thresholds.min_source_quality,\n      discovery_queries: [queryContext.query].filter(Boolean),\n      provider_request_id: response.request_id ?? null,\n      tavily_score: providerScore\n    };\n\n    const existing = deduped.get(canonicalUrl);\n    if (!existing || candidate.relevance_score > existing.relevance_score) {\n      candidate.discovery_queries = [...new Set([...(existing?.discovery_queries ?? []), ...candidate.discovery_queries])];\n      deduped.set(canonicalUrl, candidate);\n    } else {\n      existing.discovery_queries = [...new Set([...existing.discovery_queries, ...candidate.discovery_queries])];\n    }\n  });\n});\n\nlet candidates = [...deduped.values()]\n  .sort((a, b) => b.relevance_score - a.relevance_score || b.source_quality_score - a.source_quality_score)\n  .slice(0, config.limits.max_candidates);\n\nif (!candidates.length) {\n  candidates = [{\n    candidate_id: 'no-results',\n    config,\n    workspace_id: config.workspace_id,\n    workspace_domain_id: config.workspace_domain_id,\n    research_run_id: seed.research_run_id,\n    request_id: seed.request_id,\n    canonical_url: null,\n    original_url: null,\n    title: 'No usable Tavily results',\n    should_extract: false,\n    reason_codes: ['NO_SEARCH_RESULTS'],\n    discovery_provider_errors: providerErrors,\n    relevance_score: 0,\n    source_quality_score: 0\n  }];\n}\n\nreturn candidates.map((candidate, index) => ({ json: candidate, pairedItem: { item: 0 } }));"
-      },
-      "id": "dbea2955-7876-4887-a981-920d48b966dc",
+      "id": "d506edb9-c8c3-46a2-be86-9d8e20f988c4",
       "name": "Normalize and Dedupe Candidates",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1570,
-        0
+        3264,
+        528
       ]
     },
     {
       "parameters": {
-        "batchSize": 1,
         "options": {
           "reset": false
         }
       },
-      "id": "ddf42a24-f8a5-4839-ae84-310dc9a239b6",
+      "id": "a0763689-833f-457f-8f19-06137cfc2a86",
       "name": "Candidate Loop - One at a Time",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        1810,
-        0
+        3504,
+        528
       ]
     },
     {
@@ -447,13 +338,13 @@
         },
         "options": {}
       },
-      "id": "e848a560-0f91-4a57-ac6a-ddc0ea47915b",
+      "id": "301e34c2-38d0-4d10-95b1-2aa95e435114",
       "name": "Has Valid Canonical URL?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        2050,
-        120
+        3744,
+        656
       ]
     },
     {
@@ -481,13 +372,13 @@
         },
         "options": {}
       },
-      "id": "8ccf8734-1834-4fc6-a326-7a950112af50",
+      "id": "6143a94c-3cbf-4c51-b1d4-e2518aba1efc",
       "name": "Meets Relevance Gate?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        2280,
-        120
+        3984,
+        656
       ]
     },
     {
@@ -524,37 +415,37 @@
           "timeout": 20000
         }
       },
-      "id": "feddccf6-1104-447d-a7c4-e50f45de7dec",
+      "id": "ae759224-c815-4bdb-aba3-69ccbe3fc260",
       "name": "Lookup Existing Source",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2510,
-        40
+        4208,
+        576
       ],
-      "credentials": {
-        "supabaseApi": {
-          "id": "REPLACE_WITH_SUPABASE_CREDENTIAL_ID",
-          "name": "supabase"
-        }
-      },
       "retryOnFail": true,
       "maxTries": 2,
       "waitBetweenTries": 800,
       "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "jsCode": "const candidate = $('Candidate Loop - One at a Time').item.json;\nconst response = $input.first().json;\nconst rows = Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : []);\nconst existing = rows[0] ?? null;\n\nreturn [{\n  json: {\n    ...candidate,\n    existing_source_id: existing?.id ?? null,\n    existing_content_hash: existing?.content_hash ?? null,\n    source_lookup_failed: Boolean(response?.error && !existing)\n  }\n}];"
       },
-      "id": "0ace3685-3a25-43d4-a5c7-7666c3a82fc8",
+      "id": "f276979d-45e8-4b42-955c-5dd774d6e54f",
       "name": "Resolve Existing Source",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2740,
-        40
+        4432,
+        576
       ]
     },
     {
@@ -582,87 +473,45 @@
         },
         "options": {}
       },
-      "id": "83a5052e-2565-4a17-a257-39b794d44478",
+      "id": "b2da9320-6fff-4d4c-ab3f-9e1abc170135",
       "name": "Already Exists?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        2970,
-        40
+        4672,
+        576
       ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://api.firecrawl.dev/v2/scrape",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ url: $json.canonical_url, formats: ['markdown'], onlyMainContent: true, timeout: 30000 }) }}",
-        "options": {
-          "timeout": 45000
-        }
-      },
-      "id": "4b26e67a-98d0-42b3-a160-315cf3f697c3",
-      "name": "Firecrawl Scrape",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        3210,
-        180
-      ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "REPLACE_WITH_FIRECRAWL_CREDENTIAL_ID",
-          "name": "firecrawl"
-        }
-      },
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 1500,
-      "alwaysOutputData": true,
-      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "jsCode": "const candidate = $('Resolve Existing Source').item.json;\nconst response = $input.first().json ?? {};\nconst data = response.data ?? {};\nconst metadata = data.metadata ?? {};\nconst raw = String(data.markdown ?? '');\nconst maxChars = candidate.config.limits.max_source_chars;\n\nlet content = raw\n  .replace(/data:image\\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=\\s]+/g, '')\n  .replace(/\\[(?:Skip to content|Menu|Search)\\]\\([^)]*\\)/gi, '')\n  .replace(/\\n{4,}/g, '\\n\\n\\n')\n  .replace(/[ \\t]{3,}/g, '  ')\n  .trim();\n\nconst wasTruncated = content.length > maxChars;\nif (wasTruncated) content = content.slice(0, maxChars);\n\nlet contentStatus = 'success';\nconst reasonCodes = [...(candidate.reason_codes ?? [])];\nif (!content || response.error || response.success === false) {\n  contentStatus = 'failed';\n  reasonCodes.push('EXTRACTION_FAILED');\n} else if (content.length < candidate.config.limits.min_content_chars) {\n  contentStatus = 'partial';\n  reasonCodes.push('CONTENT_TOO_SHORT');\n} else if (wasTruncated) {\n  contentStatus = 'partial';\n  reasonCodes.push('CONTENT_TRUNCATED');\n}\n\nreturn [{\n  json: {\n    ...candidate,\n    content_text: content || null,\n    content_status: contentStatus,\n    extraction_method: 'firecrawl-v2-markdown',\n    extracted_at: new Date().toISOString(),\n    publisher: candidate.publisher ?? metadata.ogSiteName ?? metadata.sourceURL ?? null,\n    author: candidate.author ?? metadata.author ?? null,\n    published_at: candidate.published_at ?? metadata.publishedTime ?? null,\n    language: metadata.language ?? candidate.language ?? 'en',\n    reason_codes: [...new Set(reasonCodes)],\n    firecrawl_warning: response.warning ?? null,\n    firecrawl_status_code: metadata.statusCode ?? null\n  }\n}];"
       },
-      "id": "928ba13e-c4b2-4271-ac6f-6fb66602a9fe",
+      "id": "b0a7067f-feee-4a31-a733-9fb76f400e17",
       "name": "Normalize Extracted Content",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3450,
-        180
+        5536,
+        704
       ]
     },
     {
       "parameters": {
         "jsCode": "const crypto = require('crypto');\nconst item = $input.first().json;\nconst config = item.config;\n\nconst uuid = () => {\n  const b = crypto.randomBytes(16);\n  b[6] = (b[6] & 0x0f) | 0x40;\n  b[8] = (b[8] & 0x3f) | 0x80;\n  const h = b.toString('hex');\n  return h.slice(0,8) + '-' + h.slice(8,12) + '-' + h.slice(12,16) + '-' + h.slice(16,20) + '-' + h.slice(20);\n};\n\nconst isDuplicate = Boolean(item.existing_source_id);\nconst hasContent = typeof item.content_text === 'string' && item.content_text.length > 0;\nconst hash = hasContent ? 'sha256:' + crypto.createHash('sha256').update(item.content_text, 'utf8').digest('hex') : null;\nconst contentStatus = isDuplicate ? 'pending' : (item.content_status ?? 'pending');\n\nlet decision = 'needs_review';\nconst reasons = [...new Set(item.reason_codes ?? [])];\nif (isDuplicate) {\n  decision = 'duplicate';\n  reasons.push('DUPLICATE_CANONICAL_URL');\n} else if (!item.should_extract) {\n  decision = 'rejected';\n  if (!reasons.includes('LOW_RELEVANCE')) reasons.push('LOW_RELEVANCE');\n} else if (!hasContent || contentStatus === 'failed' || contentStatus === 'blocked') {\n  decision = 'rejected';\n  reasons.push('EXTRACTION_FAILED');\n} else if (contentStatus === 'partial') {\n  decision = 'needs_review';\n} else {\n  decision = 'needs_review';\n}\n\nconst sourceId = item.existing_source_id ?? uuid();\nconst eligible = !isDuplicate && hasContent && contentStatus === 'success' && item.relevance_score >= config.thresholds.min_relevance;\n\nconst sourceContract = {\n  schema_version: config.contract_version,\n  source_id: sourceId,\n  workspace_id: item.workspace_id,\n  workspace_domain_id: item.workspace_domain_id,\n  collection_run_id: item.research_run_id,\n  source_type: item.source_type ?? 'article',\n  discovery: {\n    channel: item.discovery_channel ?? 'web_search',\n    provider: item.discovery_provider ?? 'tavily',\n    query: item.query ?? null,\n    result_rank: Number(item.result_rank || 1),\n    external_result_id: item.provider_request_id ?? null,\n    discovered_at: item.discovered_at ?? new Date().toISOString()\n  },\n  identity: {\n    original_url: item.original_url,\n    canonical_url: item.canonical_url,\n    title: item.title,\n    publisher: item.publisher ?? null,\n    author: item.author ?? null,\n    language: item.language ?? 'en',\n    published_at: item.published_at ?? null\n  },\n  content: {\n    text: hasContent ? item.content_text : null,\n    summary: null,\n    content_hash: hash,\n    extraction_method: hasContent ? (item.extraction_method ?? 'firecrawl-v2-markdown') : null,\n    extracted_at: hasContent ? (item.extracted_at ?? new Date().toISOString()) : null,\n    status: contentStatus\n  },\n  classification: {\n    domain_key: config.domain_key,\n    topics: [config.topic],\n    geographies: config.geographies,\n    entity_types: [],\n    relevance_score: Number(item.relevance_score ?? 0),\n    source_quality_score: Number(item.source_quality_score ?? 0),\n    decision,\n    reason_codes: [...new Set(reasons)]\n  },\n  verification: {\n    status: hasContent ? 'partially_verified' : 'unverified',\n    checked_at: new Date().toISOString(),\n    checks: [\n      { type: 'canonical_url_present', passed: Boolean(item.canonical_url), details: null },\n      { type: 'content_extracted', passed: hasContent, details: contentStatus }\n    ]\n  },\n  metadata: {\n    storage_class: 'S0',\n    provider: {\n      search_request_id: item.provider_request_id ?? null,\n      firecrawl_status_code: item.firecrawl_status_code ?? null,\n      warning: item.firecrawl_warning ?? null\n    },\n    discovery_queries: item.discovery_queries ?? [item.query].filter(Boolean),\n    engine_version: config.engine_version\n  }\n};\n\nreturn [{\n  json: {\n    ...item,\n    source_id: sourceId,\n    content_hash: hash,\n    source_decision: decision,\n    eligible_for_evidence: eligible,\n    source_contract: sourceContract\n  }\n}];"
       },
-      "id": "fe70f3e6-a604-4e58-a746-f412adcd91fc",
+      "id": "67bd7c12-20e8-4c32-843d-0206b6ca3e97",
       "name": "Prepare Source Persistence",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3690,
-        40
+        5776,
+        576
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $('Validate and Prepare Run').item.json.config.supabase_url + '/rest/v1/rpc/n8n_record_research_source' }}",
+        "url": "={{ $('Validate and Prepare Run').first().json.config.supabase_url + '/rest/v1/rpc/n8n_record_research_source' }}",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "supabaseApi",
         "sendHeaders": true,
@@ -685,35 +534,35 @@
           "timeout": 30000
         }
       },
-      "id": "1a6aab7c-2850-42a0-a9b9-6856c10d454b",
+      "id": "45f8401e-7a09-4543-b761-ec11cf30e841",
       "name": "Persist Source via RPC",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3930,
-        40
+        6016,
+        576
       ],
-      "credentials": {
-        "supabaseApi": {
-          "id": "REPLACE_WITH_SUPABASE_CREDENTIAL_ID",
-          "name": "supabase"
-        }
-      },
       "retryOnFail": true,
       "maxTries": 2,
-      "waitBetweenTries": 1000
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      }
     },
     {
       "parameters": {
-        "jsCode": "const prepared = $('Prepare Source Persistence').item.json;\nconst persisted = $input.first().json ?? {};\nreturn [{\n  json: {\n    ...prepared,\n    source_id: persisted.source_id ?? prepared.source_id,\n    source_match_type: persisted.match_type ?? null,\n    source_decision: persisted.decision ?? prepared.source_decision,\n    source_is_new: Boolean(persisted.is_new),\n    source_persisted: Boolean(persisted.source_id),\n    eligible_for_evidence: Boolean(prepared.eligible_for_evidence && persisted.source_id && persisted.is_new)\n  }\n}];"
+        "jsCode": "const prepared = $('Prepare Source Persistence').first().json;\nconst persisted = $input.first().json ?? {};\nreturn [{\n  json: {\n    ...prepared,\n    source_id: persisted.source_id ?? prepared.source_id,\n    source_match_type: persisted.match_type ?? null,\n    source_decision: persisted.decision ?? prepared.source_decision,\n    source_is_new: Boolean(persisted.is_new),\n    source_persisted: Boolean(persisted.source_id),\n    eligible_for_evidence: Boolean(prepared.eligible_for_evidence && persisted.source_id && persisted.is_new)\n  }\n}];"
       },
-      "id": "59a67d94-d2e3-409e-a1bf-5a47ebb889f1",
+      "id": "04797eb2-dc38-4de5-bf0b-9ef82f3d4dd9",
       "name": "Restore Persisted Source Context",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4170,
-        40
+        6256,
+        576
       ]
     },
     {
@@ -741,13 +590,13 @@
         },
         "options": {}
       },
-      "id": "217ede1d-05be-4a65-ae74-08841a04da96",
+      "id": "793b730c-20d6-4ceb-ae1a-688453199bb8",
       "name": "Should Store Source Content?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        4410,
-        40
+        6496,
+        576
       ]
     },
     {
@@ -777,37 +626,37 @@
           "timeout": 30000
         }
       },
-      "id": "cee29761-d7b7-404f-af6c-8cf064e42b16",
+      "id": "64ffc60b-6007-4035-9c94-83c2c0444d01",
       "name": "Upload Source Content",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        4650,
-        80
+        6736,
+        608
       ],
-      "credentials": {
-        "supabaseApi": {
-          "id": "REPLACE_WITH_SUPABASE_CREDENTIAL_ID",
-          "name": "supabase"
-        }
-      },
       "retryOnFail": true,
       "maxTries": 2,
       "waitBetweenTries": 1000,
       "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "jsCode": "const source = $('Restore Persisted Source Context').item.json;\nconst response = $input.first().json ?? {};\nconst expectedPath = source.workspace_id + '/' + source.research_run_id + '/' + source.source_id + '.md';\nconst stored = Boolean(response.Key || response.key || response.Id || response.id);\n\nreturn [{\n  json: {\n    ...source,\n    content_stored: stored,\n    content_storage_path: stored ? expectedPath : null,\n    content_storage_failed: !stored\n  }\n}];"
       },
-      "id": "fd5e146f-f2db-4724-ac92-0dcb8614400b",
+      "id": "7f61cb64-69f1-4ed1-90c6-c7f5e17b0821",
       "name": "Evaluate Content Upload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4890,
-        80
+        6976,
+        608
       ]
     },
     {
@@ -835,13 +684,13 @@
         },
         "options": {}
       },
-      "id": "9a754def-0a5d-4243-a4ca-ccf2b837b9cc",
+      "id": "f1907cad-5ee8-4af8-9528-28b8ac46a88e",
       "name": "Content Stored?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        5130,
-        80
+        7216,
+        608
       ]
     },
     {
@@ -870,35 +719,35 @@
           "timeout": 20000
         }
       },
-      "id": "f541ce36-bff9-44c7-a3df-aa7106a81fc3",
+      "id": "dee41eed-b1f3-4fcd-ac08-e0420a18243f",
       "name": "Update Source Storage Path",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        5370,
-        20
+        7456,
+        544
       ],
-      "credentials": {
-        "supabaseApi": {
-          "id": "REPLACE_WITH_SUPABASE_CREDENTIAL_ID",
-          "name": "supabase"
-        }
-      },
       "retryOnFail": true,
       "maxTries": 2,
-      "waitBetweenTries": 800
+      "waitBetweenTries": 800,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      }
     },
     {
       "parameters": {
         "jsCode": "const source = $('Evaluate Content Upload').item.json;\nreturn [{ json: { ...source, content_stored: true, content_storage_failed: false } }];"
       },
-      "id": "03c6a77f-d288-4920-adde-a0b166673f5b",
+      "id": "45eb0d88-fb5d-403d-bd9d-0a55d1289bc9",
       "name": "Restore Stored Source Context",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        5610,
-        20
+        7696,
+        544
       ]
     },
     {
@@ -926,26 +775,26 @@
         },
         "options": {}
       },
-      "id": "bda6d7dd-ffad-4ffc-a684-ea95cb1f9ac0",
+      "id": "7a2bc9f3-85be-4433-b388-3b8291bfd52c",
       "name": "Eligible for Evidence?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        5850,
-        40
+        7936,
+        576
       ]
     },
     {
       "parameters": {
         "jsCode": "const source = $input.first().json;\nconst config = source.config;\n\nconst schema = {\n  type: 'object',\n  additionalProperties: false,\n  properties: {\n    items: {\n      type: 'array',\n      minItems: 0,\n      maxItems: config.limits.max_evidence_per_source,\n      items: {\n        type: 'object',\n        additionalProperties: false,\n        properties: {\n          evidence_type: { type: 'string', enum: ['fact', 'quote', 'metric', 'event', 'claim', 'counter_claim'] },\n          claim_text: { type: 'string' },\n          excerpt: { type: 'string' },\n          locator: {\n            type: 'object',\n            additionalProperties: false,\n            properties: {\n              section: { type: 'string' },\n              paragraph: { type: 'integer' }\n            },\n            required: ['section', 'paragraph']\n          },\n          polarity: { type: 'string', enum: ['supports', 'contradicts', 'neutral'] },\n          confidence: { type: 'number', minimum: 0, maximum: 1 }\n        },\n        required: ['evidence_type', 'claim_text', 'excerpt', 'locator', 'polarity', 'confidence']\n      }\n    }\n  },\n  required: ['items']\n};\n\nconst sourceInput = {\n  title: source.title,\n  canonical_url: source.canonical_url,\n  publisher: source.publisher,\n  published_at: source.published_at,\n  research_objective: config.objective,\n  maximum_items: config.limits.max_evidence_per_source,\n  source_text: source.content_text\n};\n\nreturn [{\n  json: {\n    ...source,\n    openai_request: {\n      model: config.evidence_model,\n      instructions: 'Extract only decision-useful evidence explicitly supported by the supplied source. Every excerpt must be copied from the supplied source text, with no paraphrasing inside excerpt. Claims must be concise normalized propositions. Do not use outside knowledge. Do not infer missing dates, actors, amounts, or causality. Return an empty items array when the source contains no suitable evidence.',\n      input: [{\n        role: 'user',\n        content: [{ type: 'input_text', text: JSON.stringify(sourceInput) }]\n      }],\n      text: {\n        format: {\n          type: 'json_schema',\n          name: 'research_evidence_items',\n          strict: true,\n          schema\n        }\n      },\n      max_output_tokens: config.limits.max_openai_output_tokens,\n      store: false\n    }\n  }\n}];"
       },
-      "id": "5719bdc0-a63c-4999-ac13-0b418733bc0b",
+      "id": "cb30d90c-e83c-499f-8aca-a4319ec02379",
       "name": "Build Evidence Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        6090,
-        -60
+        8176,
+        464
       ]
     },
     {
@@ -970,37 +819,37 @@
           "timeout": 90000
         }
       },
-      "id": "ed5fe324-b92d-43cc-aa42-34ed049a6f0d",
+      "id": "98def728-9fa5-475e-991b-e943cbe7f1a6",
       "name": "OpenAI Evidence Extraction",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        6330,
-        -60
+        8416,
+        464
       ],
-      "credentials": {
-        "openAiApi": {
-          "id": "REPLACE_WITH_OPENAI_CREDENTIAL_ID",
-          "name": "openai"
-        }
-      },
       "retryOnFail": true,
       "maxTries": 2,
       "waitBetweenTries": 1800,
       "alwaysOutputData": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "7a0hdZ68ejgk6EnD",
+          "name": "OpenAI account"
+        }
+      },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "jsCode": "const response = $input.first().json ?? {};\nconst source = $('Build Evidence Request').item.json;\nconst config = source.config;\nconst crypto = require('crypto');\n\nconst uuid = () => {\n  const b = crypto.randomBytes(16);\n  b[6] = (b[6] & 0x0f) | 0x40;\n  b[8] = (b[8] & 0x3f) | 0x80;\n  const h = b.toString('hex');\n  return h.slice(0,8) + '-' + h.slice(8,12) + '-' + h.slice(12,16) + '-' + h.slice(16,20) + '-' + h.slice(20);\n};\n\nconst outputText = (response.output ?? [])\n  .flatMap((item) => item.content ?? [])\n  .find((content) => content.type === 'output_text')?.text;\n\nlet parsed = null;\nlet modelError = null;\ntry {\n  parsed = outputText ? JSON.parse(outputText) : null;\n} catch {\n  modelError = 'EVIDENCE_OUTPUT_INVALID_JSON';\n}\nif (!Array.isArray(parsed?.items)) modelError = modelError || 'EVIDENCE_OUTPUT_MISSING';\n\nconst normalizeWhitespace = (value) => String(value ?? '').replace(/\\s+/g, ' ').trim();\nconst normalizedSource = normalizeWhitespace(source.content_text);\nconst allowedTypes = new Set(['fact', 'quote', 'metric', 'event', 'claim', 'counter_claim']);\nconst allowedPolarity = new Set(['supports', 'contradicts', 'neutral']);\nconst grounded = [];\nlet rejectedCount = 0;\n\nfor (const raw of (parsed?.items ?? []).slice(0, config.limits.max_evidence_per_source)) {\n  const excerpt = normalizeWhitespace(raw.excerpt);\n  const claim = normalizeWhitespace(raw.claim_text);\n  const confidence = Math.max(0, Math.min(1, Number(raw.confidence ?? 0)));\n  const exactGrounding = excerpt.length >= 20 && normalizedSource.includes(excerpt);\n  const structurallyValid = allowedTypes.has(raw.evidence_type) && allowedPolarity.has(raw.polarity) && claim.length >= 10 && claim.length <= 1000;\n  if (!exactGrounding || !structurallyValid || confidence < config.thresholds.min_evidence_confidence) {\n    rejectedCount++;\n    continue;\n  }\n\n  grounded.push({\n    id: uuid(),\n    workspace_id: source.workspace_id,\n    source_id: source.source_id,\n    research_run_id: source.research_run_id,\n    evidence_type: raw.evidence_type,\n    claim_text: claim,\n    excerpt,\n    locator: {\n      section: String(raw.locator?.section ?? '').slice(0, 300),\n      paragraph: Math.max(0, Number(raw.locator?.paragraph ?? 0))\n    },\n    polarity: raw.polarity,\n    confidence,\n    verification_status: 'verified',\n    extractor_version: config.prompt_version,\n    metadata: {\n      schema_version: 'evidence-v1.0.0',\n      model_request_id: response.id ?? null,\n      model: response.model ?? config.evidence_model,\n      exact_excerpt_match: true,\n      review_mode: config.automation_mode\n    }\n  });\n}\n\nconst usage = response.usage ?? {};\nconst inputTokens = Number(usage.input_tokens ?? 0);\nconst outputTokens = Number(usage.output_tokens ?? 0);\nconst estimatedCost = (inputTokens * config.pricing_per_million_tokens.input + outputTokens * config.pricing_per_million_tokens.output) / 1000000;\nif (estimatedCost > config.limits.max_estimated_openai_cost_usd) modelError = modelError || 'RUN_OPENAI_COST_CAP_EXCEEDED';\n\nreturn [{\n  json: {\n    ...source,\n    evidence_items: grounded,\n    evidence_rejected_count: rejectedCount,\n    evidence_model_error: modelError,\n    evidence_usage: {\n      workspace_id: source.workspace_id,\n      research_run_id: source.research_run_id,\n      request_id: uuid(),\n      workflow: 'RE 00 Research Engine',\n      agent: 'evidence_extractor',\n      operation: 'structured_evidence_extraction',\n      provider: 'openai',\n      model: response.model ?? config.evidence_model,\n      model_tier: 0,\n      input_tokens: inputTokens,\n      output_tokens: outputTokens,\n      estimated_cost_usd: Number(estimatedCost.toFixed(6)),\n      latency_ms: 0,\n      success: !modelError,\n      error_code: modelError,\n      prompt_version: config.prompt_version,\n      schema_version: 'evidence-v1.0.0'\n    }\n  }\n}];"
       },
-      "id": "b20759b4-168a-4def-a097-e673080f8323",
+      "id": "e4007870-399d-45c4-8eaa-5a602c627ede",
       "name": "Parse and Verify Evidence",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        6570,
-        -60
+        8656,
+        464
       ]
     },
     {
@@ -1029,37 +878,37 @@
           "timeout": 30000
         }
       },
-      "id": "74c92898-21c1-4742-a253-dc87a22938da",
+      "id": "ead4b384-6fec-46cb-a081-660d191a8ab3",
       "name": "Record Evidence LLM Usage",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        6810,
-        -60
+        8896,
+        464
       ],
-      "credentials": {
-        "supabaseApi": {
-          "id": "REPLACE_WITH_SUPABASE_CREDENTIAL_ID",
-          "name": "supabase"
-        }
-      },
       "retryOnFail": true,
       "maxTries": 2,
       "waitBetweenTries": 1000,
-      "onError": "continueRegularOutput",
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "jsCode": "const parsed = $('Parse and Verify Evidence').item.json;\nif (!parsed.evidence_items.length) {\n  return [{\n    json: {\n      ...parsed,\n      has_evidence: false,\n      evidence_contract: null\n    }\n  }];\n}\n\nreturn parsed.evidence_items.map((evidence, index) => ({\n  json: {\n    candidate_id: parsed.candidate_id,\n    config: parsed.config,\n    workspace_id: parsed.workspace_id,\n    workspace_domain_id: parsed.workspace_domain_id,\n    research_run_id: parsed.research_run_id,\n    request_id: parsed.request_id,\n    source_id: parsed.source_id,\n    canonical_url: parsed.canonical_url,\n    source_decision: parsed.source_decision,\n    source_persisted: parsed.source_persisted,\n    content_status: parsed.content_status,\n    content_storage_failed: Boolean(parsed.content_storage_failed),\n    evidence_rejected_count: parsed.evidence_rejected_count,\n    evidence_model_error: parsed.evidence_model_error,\n    has_evidence: true,\n    evidence_contract: evidence\n  },\n  pairedItem: { item: 0 }\n}));"
       },
-      "id": "ce57e0a7-0e32-4fdf-afd8-f8377b76f4ef",
+      "id": "8e04dcaf-95bb-4e58-ba3e-a0c70ae99237",
       "name": "Expand Evidence",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        7050,
-        -60
+        9136,
+        464
       ]
     },
     {
@@ -1087,13 +936,13 @@
         },
         "options": {}
       },
-      "id": "db0bf6d7-d01d-451a-af0e-995a4abcb0c7",
+      "id": "4f718675-1115-4f08-aff4-680448162b59",
       "name": "Has Grounded Evidence?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        7290,
-        -60
+        9376,
+        464
       ]
     },
     {
@@ -1122,62 +971,62 @@
           "timeout": 30000
         }
       },
-      "id": "9b88008b-4841-4f0f-a495-75d684cc7428",
+      "id": "085c5b71-9a19-4888-9a8c-d3ffb8126a23",
       "name": "Persist Evidence via RPC",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        7530,
-        -140
+        9616,
+        384
       ],
-      "credentials": {
-        "supabaseApi": {
-          "id": "REPLACE_WITH_SUPABASE_CREDENTIAL_ID",
-          "name": "supabase"
-        }
-      },
       "retryOnFail": true,
       "maxTries": 2,
-      "waitBetweenTries": 1000
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      }
     },
     {
       "parameters": {
-        "jsCode": "const evidence = $('Expand Evidence').item.json;\nconst persisted = $input.item.json ?? {};\nreturn {\n  json: {\n    ...evidence,\n    evidence_id: persisted.evidence_id ?? evidence.evidence_contract?.id ?? null,\n    evidence_persisted: Boolean(persisted.evidence_id),\n    evidence_is_new: Boolean(persisted.is_new)\n  }\n};",
-        "mode": "runOnceForEachItem"
+        "mode": "runOnceForEachItem",
+        "jsCode": "const evidence = $('Expand Evidence').item.json;\nconst persisted = $input.item.json ?? {};\nreturn {\n  json: {\n    ...evidence,\n    evidence_id: persisted.evidence_id ?? evidence.evidence_contract?.id ?? null,\n    evidence_persisted: Boolean(persisted.evidence_id),\n    evidence_is_new: Boolean(persisted.is_new)\n  }\n};"
       },
-      "id": "b582b17e-93fe-4630-a9ef-51e4770e4c41",
+      "id": "4bdce61d-acae-49f8-aabc-663ca974531e",
       "name": "Restore Evidence Context",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        7770,
-        -140
+        9856,
+        384
       ]
     },
     {
       "parameters": {
         "jsCode": "const incoming = $input.all().map((item) => item.json ?? {});\nconst first = incoming[0] ?? {};\nconst persistedEvidence = incoming.filter((item) => item.evidence_persisted).length;\nconst invalidUrl = !first.canonical_url;\nconst errors = [];\nif (invalidUrl) errors.push('INVALID_OR_MISSING_CANONICAL_URL');\nif (first.evidence_model_error) errors.push(first.evidence_model_error);\nif (first.source_lookup_failed) errors.push('SOURCE_LOOKUP_FAILED');\nif (first.content_storage_failed) errors.push('CONTENT_STORAGE_FAILED');\n\nreturn [{\n  json: {\n    candidate_id: first.candidate_id ?? 'unknown',\n    canonical_url: first.canonical_url ?? null,\n    source_id: first.source_id ?? null,\n    source_decision: first.source_decision ?? (invalidUrl ? 'rejected' : 'unknown'),\n    source_persisted: Boolean(first.source_persisted),\n    content_status: first.content_status ?? null,\n    relevance_score: Number(first.relevance_score ?? 0),\n    evidence_persisted: persistedEvidence,\n    evidence_rejected: Number(first.evidence_rejected_count ?? 0),\n    errors\n  }\n}];"
       },
-      "id": "fbf052d2-ac0d-4df8-a580-605a4d632b73",
+      "id": "0a9d6833-dfbd-4f84-b66a-eb38b943b6a0",
       "name": "Candidate Complete",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        8010,
-        120
+        10096,
+        656
       ]
     },
     {
       "parameters": {
         "jsCode": "const results = $input.all().map((item) => item.json ?? {});\nconst seed = $('Validate and Prepare Run').first().json;\nconst plan = $('Parse Query Plan').first().json;\n\nconst metrics = {\n  queries_planned: plan.query_items.length,\n  planner_fallback_used: Boolean(plan.planner_fallback_used),\n  candidates_processed: results.length,\n  sources_persisted: results.filter((r) => r.source_persisted).length,\n  sources_duplicate: results.filter((r) => r.source_decision === 'duplicate').length,\n  sources_rejected: results.filter((r) => r.source_decision === 'rejected').length,\n  sources_needing_review: results.filter((r) => r.source_decision === 'needs_review').length,\n  crawl_success: results.filter((r) => r.content_status === 'success').length,\n  crawl_partial: results.filter((r) => r.content_status === 'partial').length,\n  crawl_failed: results.filter((r) => r.content_status === 'failed').length,\n  evidence_persisted: results.reduce((sum, r) => sum + Number(r.evidence_persisted || 0), 0),\n  evidence_rejected: results.reduce((sum, r) => sum + Number(r.evidence_rejected || 0), 0),\n  candidate_errors: results.reduce((sum, r) => sum + (Array.isArray(r.errors) ? r.errors.length : 0), 0),\n  automation_mode: seed.config.automation_mode,\n  engine_version: seed.config.engine_version\n};\n\nlet finalStatus = 'completed';\nif (metrics.sources_persisted === 0) finalStatus = 'failed';\nelse if (metrics.candidate_errors > 0 || metrics.crawl_failed > 0 || plan.planner_fallback_used) finalStatus = 'partial';\n\nreturn [{\n  json: {\n    config: seed.config,\n    research_run_id: seed.research_run_id,\n    request_id: seed.request_id,\n    final_status: finalStatus,\n    metrics,\n    error_patch: {\n      planner_error: plan.planner_error_code ?? null,\n      candidate_errors: results.filter((r) => Array.isArray(r.errors) && r.errors.length).map((r) => ({ candidate_id: r.candidate_id, codes: r.errors })).slice(0, 20)\n    }\n  }\n}];"
       },
-      "id": "1cfbd05e-d9c4-4a7b-a6e1-8b00a48b9441",
+      "id": "5c1f19be-570c-412a-8b5a-acceb4173f9f",
       "name": "Summarize Research Run",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2050,
-        -180
+        3744,
+        352
       ]
     },
     {
@@ -1206,36 +1055,81 @@
           "timeout": 30000
         }
       },
-      "id": "3ca105eb-6c86-48b1-aa25-f3016a027c07",
+      "id": "e80f00ba-a4c0-4940-ba51-a7e7efd611c3",
       "name": "Finalize Research Run",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2290,
-        -180
+        3984,
+        352
       ],
-      "credentials": {
-        "supabaseApi": {
-          "id": "REPLACE_WITH_SUPABASE_CREDENTIAL_ID",
-          "name": "supabase"
-        }
-      },
       "retryOnFail": true,
       "maxTries": 2,
-      "waitBetweenTries": 1000
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      }
     },
     {
       "parameters": {
         "jsCode": "const summary = $('Summarize Research Run').first().json;\nconst finalized = $input.first().json ?? {};\nreturn [{\n  json: {\n    ok: summary.final_status === 'completed' || summary.final_status === 'partial',\n    research_run_id: summary.research_run_id,\n    request_id: summary.request_id,\n    status: finalized.status ?? summary.final_status,\n    metrics: summary.metrics,\n    review_required: true,\n    next_action: 'Review source and evidence records in Supabase before any downstream signal generation.'\n  }\n}];"
       },
-      "id": "8841ea44-8fef-44de-abd4-94210206cc6c",
+      "id": "37829518-f4d0-4d49-8a67-609873e13533",
       "name": "Final Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2530,
-        -180
+        4224,
+        352
       ]
+    },
+    {
+      "parameters": {
+        "query": "={{ $json.query }}",
+        "options": {
+          "search_depth": "basic",
+          "max_results": "={{ $json.result_limit }}"
+        }
+      },
+      "type": "@tavily/n8n-nodes-tavily.tavily",
+      "typeVersion": 1,
+      "position": [
+        2912,
+        528
+      ],
+      "id": "f8bf2912-68be-48ac-a48c-a05b1b468ef1",
+      "name": "Tavily Search",
+      "retryOnFail": true,
+      "credentials": {
+        "tavilyApi": {
+          "id": "2zOgpdnN8HyOetb2",
+          "name": "Tavily account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "scrape",
+        "url": "={{ $json.canonical_url }}",
+        "requestOptions": {}
+      },
+      "type": "@mendable/n8n-nodes-firecrawl.firecrawl",
+      "typeVersion": 1,
+      "position": [
+        5056,
+        704
+      ],
+      "id": "55388bf9-1edf-488c-a296-ece5ed02d31d",
+      "name": "/scrape",
+      "credentials": {
+        "firecrawlApi": {
+          "id": "yIMOx1xvRIQDmKGL",
+          "name": "Firecrawl account"
+        }
+      }
     }
   ],
   "pinData": {},
@@ -1245,17 +1139,6 @@
         [
           {
             "node": "Research Request and Limits",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Scheduled Run Trigger": {
-      "main": [
-        [
-          {
-            "node": "Prepare Scheduled Research Request",
             "type": "main",
             "index": 0
           }
@@ -1273,37 +1156,8 @@
         ]
       ]
     },
-    "Prepare Scheduled Research Request": {
-      "main": [
-        [
-          {
-            "node": "Validate and Prepare Run",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Validate and Prepare Run": {
       "main": [
-        [
-          {
-            "node": "Run Already Queued?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Run Already Queued?": {
-      "main": [
-        [
-          {
-            "node": "Claim Research Run",
-            "type": "main",
-            "index": 0
-          }
-        ],
         [
           {
             "node": "Create Research Run",
@@ -1384,17 +1238,6 @@
         [
           {
             "node": "Tavily Search",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Tavily Search": {
-      "main": [
-        [
-          {
-            "node": "Normalize and Dedupe Candidates",
             "type": "main",
             "index": 0
           }
@@ -1499,18 +1342,7 @@
         ],
         [
           {
-            "node": "Firecrawl Scrape",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Firecrawl Scrape": {
-      "main": [
-        [
-          {
-            "node": "Normalize Extracted Content",
+            "node": "/scrape",
             "type": "main",
             "index": 0
           }
@@ -1786,20 +1618,66 @@
           }
         ]
       ]
+    },
+    "Tavily Search": {
+      "main": [
+        [
+          {
+            "node": "Normalize and Dedupe Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "/scrape": {
+      "main": [
+        [
+          {
+            "node": "Normalize Extracted Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
   "settings": {
     "executionOrder": "v1",
-    "saveManualExecutions": true,
-    "saveExecutionProgress": true,
-    "saveDataErrorExecution": "all",
-    "saveDataSuccessExecution": "all",
-    "executionTimeout": 1800
+    "binaryMode": "separate"
   },
-  "versionId": "70f0cc34-f205-4408-af22-45a39194afc3",
+  "versionId": "3a694ab0-d400-4c9b-ac64-d144dbc58ad4",
   "meta": {
-    "templateCredsSetupCompleted": false
+    "templateCredsSetupCompleted": true,
+    "instanceId": "0b0cbe1b194115a42ad8ae22724abf34f516e7da8a529780997b500125b4501f"
   },
-  "tags": []
+  "nodeGroups": [],
+  "id": "4vgYIQhbg8KjbFmA",
+  "tags": [
+    {
+      "name": "research-engine",
+      "id": "lvUfI0PJeTXYJ4YA",
+      "updatedAt": "2026-09-27T02:00:56.385Z",
+      "createdAt": "2026-09-27T02:00:56.385Z"
+    },
+    {
+      "name": "review-only",
+      "id": "rOXwklkwFCs7UABT",
+      "updatedAt": "2026-09-27T02:00:56.443Z",
+      "createdAt": "2026-09-27T02:00:56.443Z"
+    },
+    {
+      "name": "manual-only",
+      "id": "sicpfUKUB5wbfFUD",
+      "updatedAt": "2026-09-27T02:00:56.412Z",
+      "createdAt": "2026-09-27T02:00:56.412Z"
+    },
+    {
+      "name": "development",
+      "id": "zRwUjW2CqOB2Xraj",
+      "updatedAt": "2026-09-27T02:00:56.480Z",
+      "createdAt": "2026-09-27T02:00:56.480Z"
+    }
+  ]
 }

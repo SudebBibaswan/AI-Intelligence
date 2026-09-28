@@ -1,0 +1,2461 @@
+{
+  "name": "Research Engine V2 - Multi Source",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Research Engine V2 — safe import\n\n1. This file is generated from your working **Research Engine_current_export.json**.\n2. Existing native **Tavily** and **Firecrawl** nodes and all four stored credentials are preserved.\n3. Import this as a separate workflow; do not overwrite the working workflow yet.\n4. Run the manual path with small limits, then test the scheduled input path.\n5. Reddit/X results are weak-signal discovery only. Hacker News links, arXiv abstracts, GDELT news, monitored RSS, and official/VC/YC web results enter the same global dedupe and evidence pipeline.\n6. Default paid-provider caps: 3 Tavily searches and 2 Firecrawl pages per run.",
+        "height": 430,
+        "width": 760,
+        "color": 4
+      },
+      "id": "eb9f7d15-c251-43fb-accb-b27710013ee1",
+      "name": "SETUP - READ FIRST",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        288,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## What this workflow actually does\n\n**Run control** → creates and atomically claims a Supabase research run.\n\n**Query planning** → bounded OpenAI Structured Output with deterministic fallback.\n\n**Discovery** → Tavily searches all planned queries; candidates are canonicalized and deduplicated across queries.\n\n**Candidate loop** → one URL at a time, with relevance gates, existing-source lookup, Firecrawl extraction, quality checks, and SHA-256 hashing.\n\n**Evidence** → bounded OpenAI extraction; excerpts are deterministically checked against source text before persistence.\n\n**Persistence** → service-only Supabase RPCs enforce lineage, replay safety, and review-only status.\n\n**Finalization** → metrics and terminal state are written to `research_runs`.",
+        "height": 430,
+        "width": 900,
+        "color": 5
+      },
+      "id": "494a0192-3424-4da3-8ecf-94556eb4d164",
+      "name": "PIPELINE MAP",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1088,
+        -96
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "af213715-ad4b-422e-8c2c-9647a173a344",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        352,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// EDIT ONLY THIS NODE for a manual research run.\n// Credentials remain in n8n's credential store and are never placed here.\n\nconst now = new Date();\nconst from = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);\n\nreturn [{\n  json: {\n    config: {\n      supabase_url: 'https://jaeltkzfjgrzgxgzxlfs.supabase.co',\n      workspace_id: 'a51b8277-4cd5-4f8a-9ffd-4ddbe56683da',\n      workspace_domain_id: '11068f00-2e6b-462c-b455-c69384e5e8a8',\n      domain_key: 'core-ai-it-infrastructure',\n      topic: 'AI infrastructure, GPU cloud, data centers, model training and inference platforms, model serving, vector databases, agent infrastructure, developer tooling and AI security',\n      objective: 'Find material, current developments specifically about core AI and IT infrastructure. Prefer primary announcements, technical documentation, research, and independent reporting. Include funding only when the company or project is clearly an AI-infrastructure provider.',\n      geographies: [],\n      entities: [],\n      preferred_domains: [],\n      blocked_domains: [\n        'pinterest.com',\n        'quora.com',\n        'medium.com'\n      ],\n      date_from: from.toISOString(),\n      date_to: now.toISOString(),\n      automation_mode: 'automatic',\n      query_model: 'gpt-6-luna',\n      evidence_model: 'gpt-6-luna',\n      prompt_version: 'research-evidence-v1.1.0',\n      query_prompt_version: 'research-query-plan-v1.0.0',\n      contract_version: '1.0.0',\n      engine_version: 'research-engine-v2.1.0',\n      limits: {\n        max_queries: 4,\n        results_per_query: 8,\n        max_candidates: 18,\n        max_source_chars: 24000,\n        min_content_chars: 700,\n        max_evidence_per_source: 5,\n        max_openai_output_tokens: 1600,\n        max_estimated_openai_cost_usd: 0.10,\n        max_tavily_queries: 4,\n        max_firecrawl_candidates: 6,\n        hn_results: 10,\n        hn_queries: 5,\n        arxiv_results: 8,\n        gdelt_results: 30,\n        gdelt_queries: 1\n      },\n      thresholds: {\n        min_relevance: 0.38,\n        min_source_quality: 0.40,\n        min_evidence_confidence: 0.55\n      },\n      monitored_feeds: [],\n      ecosystem_domains: [\n        'ycombinator.com',\n        'a16z.com',\n        'sequoiacap.com',\n        'accel.com',\n        'lightspeedvp.com',\n        'indexventures.com',\n        'generalcatalyst.com',\n        'bvp.com',\n        'reddit.com',\n        'x.com'\n      ],\n      pricing_per_million_tokens: {\n        input: 0.10,\n        output: 0.50\n      }\n    }\n  }\n}];"
+      },
+      "id": "9834f34b-b67e-4b63-b5ce-ba87d4cce678",
+      "name": "Research Request and Limits",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst config = input.config ?? {};\nconst uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\n\nconst uuid = () => {\n  const hex = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16));\n  hex[12] = '4';\n  hex[16] = (8 + Math.floor(Math.random() * 4)).toString(16);\n  return hex.slice(0, 8).join('') + '-' + hex.slice(8, 12).join('') + '-' + hex.slice(12, 16).join('') + '-' + hex.slice(16, 20).join('') + '-' + hex.slice(20).join('');\n};\n\nconst requiredStrings = ['supabase_url', 'workspace_id', 'workspace_domain_id', 'domain_key', 'topic', 'objective'];\nfor (const key of requiredStrings) {\n  if (typeof config[key] !== 'string' || !config[key].trim() || config[key].includes('REPLACE_')) {\n    throw new Error('CONFIG_REQUIRED_' + key.toUpperCase());\n  }\n}\n\nif (!/^https:\\/\\/[a-z0-9-]+\\.supabase\\.co\\/?$/i.test(config.supabase_url)) {\n  throw new Error('INVALID_SUPABASE_URL');\n}\nif (!uuidPattern.test(config.workspace_id) || !uuidPattern.test(config.workspace_domain_id)) {\n  throw new Error('INVALID_WORKSPACE_UUID');\n}\nif (config.automation_mode !== 'automatic') {\n  throw new Error('RESEARCH_ENGINE_REQUIRES_AUTOMATIC_EVIDENCE_VERIFICATION');\n}\n\nconfig.supabase_url = config.supabase_url.replace(/\\/$/, '');\nconfig.limits = config.limits ?? {};\nconfig.thresholds = config.thresholds ?? {};\nconfig.pricing_per_million_tokens = config.pricing_per_million_tokens ?? {};\nconfig.limits.max_queries = Math.max(1, Math.min(5, Number(config.limits.max_queries || 3)));\nconfig.limits.results_per_query = Math.max(1, Math.min(10, Number(config.limits.results_per_query || 5)));\nconfig.limits.max_candidates = Math.max(1, Math.min(20, Number(config.limits.max_candidates || 10)));\nconfig.limits.max_evidence_per_source = Math.max(1, Math.min(8, Number(config.limits.max_evidence_per_source || 5)));\nconfig.limits.max_source_chars = Math.max(4000, Math.min(50000, Number(config.limits.max_source_chars || 24000)));\n\nconst run_already_created = input.existing_research_run === true;\nconst research_run_id = run_already_created ? input.research_run_id : uuid();\nconst request_id = run_already_created ? input.request_id : uuid();\n\nif (!uuidPattern.test(research_run_id) || !uuidPattern.test(request_id)) {\n  throw new Error('INVALID_RESEARCH_RUN_OR_REQUEST_UUID');\n}\n\nconst created_at = new Date().toISOString();\n\nreturn [{\n  json: {\n    config,\n    research_run_id,\n    request_id,\n    run_already_created,\n    schedule_metadata: input.schedule_metadata ?? null,\n    created_at,\n    run_payload: {\n      id: research_run_id,\n      workspace_id: config.workspace_id,\n      workspace_domain_id: config.workspace_domain_id,\n      trigger_type: run_already_created ? 'schedule' : 'manual',\n      status: 'queued',\n      request_id,\n      idempotency_key: 'n8n:' + research_run_id,\n      contract_version: config.contract_version,\n      config_snapshot: config,\n      metrics: {\n        engine_version: config.engine_version,\n        started_from: run_already_created ? 'shared-domain-scheduler-v1' : 'n8n-manual-import-v1'\n      },\n      error_summary: {}\n    }\n  }\n}];"
+      },
+      "id": "7f41b451-e816-4394-b1d6-7ce4c1c5ce12",
+      "name": "Validate and Prepare Run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        816,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Validate and Prepare Run').item.json.config.supabase_url + '/rest/v1/research_runs' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Validate and Prepare Run').item.json.run_payload) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "6ced9c5c-4d29-45e2-aae9-75aae4b2eb7c",
+      "name": "Create Research Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        704
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Validate and Prepare Run').item.json.config.supabase_url + '/rest/v1/rpc/n8n_claim_research_run' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_research_run_id: $('Validate and Prepare Run').item.json.research_run_id, p_request_id: $('Validate and Prepare Run').item.json.request_id }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "60747970-12d6-448b-89e6-9ccd1eb7b07d",
+      "name": "Claim Research Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1312,
+        528
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const claimed = $input.first().json;\nconst seed = $('Validate and Prepare Run').first().json;\nconst config = seed.config;\n\nconst schema = {\n  type: 'object',\n  additionalProperties: false,\n  properties: {\n    queries: {\n      type: 'array',\n      minItems: 1,\n      maxItems: config.limits.max_queries,\n      items: {\n        type: 'object',\n        additionalProperties: false,\n        properties: {\n          query: { type: 'string' },\n          intent: { type: 'string', enum: ['current_news', 'official_sources', 'research_and_technical', 'market_activity', 'regulation_and_safety'] },\n          recency_days: { type: 'integer', minimum: 1, maximum: 365 },\n          result_limit: { type: 'integer', minimum: 1, maximum: 10 }\n        },\n        required: ['query', 'intent', 'recency_days', 'result_limit']\n      }\n    }\n  },\n  required: ['queries']\n};\n\nconst planningContext = {\n  domain: config.domain_key,\n  topic: config.topic,\n  objective: config.objective,\n  geographies: config.geographies,\n  entities: config.entities,\n  preferred_domains: config.preferred_domains,\n  date_from: config.date_from,\n  date_to: config.date_to,\n  maximum_queries: config.limits.max_queries,\n  maximum_results_per_query: config.limits.results_per_query\n};\n\nreturn [{\n  json: {\n    ...seed,\n    claimed_run: claimed,\n    openai_request: {\n      model: config.query_model,\n      instructions: 'Create a compact web-search plan for a research intelligence pipeline. Queries must be non-overlapping, concrete, time-aware, and optimized for source discovery rather than answering the question. Include official or primary-source language where useful. Do not invent entities. Return only the required structured output.',\n      input: [{\n        role: 'user',\n        content: [{ type: 'input_text', text: JSON.stringify(planningContext) }]\n      }],\n      text: {\n        format: {\n          type: 'json_schema',\n          name: 'research_query_plan',\n          strict: true,\n          schema\n        }\n      },\n      max_output_tokens: 1000,\n      store: false\n    }\n  }\n}];"
+      },
+      "id": "5a196f48-183c-43e5-8082-11264351edd4",
+      "name": "Build Query Planner Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1552,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.openai_request) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "ec45353e-0f83-4a6c-99d0-72c1e741a7d5",
+      "name": "OpenAI Query Planner",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1808,
+        528
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1500,
+      "alwaysOutputData": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "7a0hdZ68ejgk6EnD",
+          "name": "OpenAI account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json ?? {};\nconst seed = $('Validate and Prepare Run').first().json;\nconst config = seed.config;\n\nconst uuid = () => {\n  const h = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16));\n  h[12] = '4'; h[16] = (8 + Math.floor(Math.random() * 4)).toString(16);\n  return h.slice(0,8).join('') + '-' + h.slice(8,12).join('') + '-' + h.slice(12,16).join('') + '-' + h.slice(16,20).join('') + '-' + h.slice(20).join('');\n};\n\nconst outputText = (response.output ?? [])\n  .flatMap((item) => item.content ?? [])\n  .find((content) => content.type === 'output_text')?.text;\n\nlet parsed = null;\nlet plannerError = null;\ntry {\n  parsed = outputText ? JSON.parse(outputText) : null;\n} catch (error) {\n  plannerError = 'QUERY_PLAN_INVALID_JSON';\n}\n\nconst allowedIntents = new Set(['current_news', 'official_sources', 'research_and_technical', 'market_activity', 'regulation_and_safety']);\nlet queries = Array.isArray(parsed?.queries) ? parsed.queries : [];\nqueries = queries\n  .filter((q) => q && typeof q.query === 'string' && q.query.trim())\n  .map((q) => ({\n    query: q.query.trim().slice(0, 300),\n    intent: allowedIntents.has(q.intent) ? q.intent : 'current_news',\n    recency_days: Math.max(1, Math.min(365, Number(q.recency_days || 30))),\n    result_limit: Math.max(1, Math.min(config.limits.results_per_query, Number(q.result_limit || config.limits.results_per_query)))\n  }));\n\nif (!queries.length) {\n  plannerError = plannerError || 'QUERY_PLANNER_FALLBACK_USED';\n  const topic = config.topic;\n  queries = [\n    { query: topic + ' latest news announcements', intent: 'current_news', recency_days: 30, result_limit: config.limits.results_per_query },\n    { query: topic + ' official release funding acquisition partnership', intent: 'official_sources', recency_days: 60, result_limit: config.limits.results_per_query },\n    { query: topic + ' research paper benchmark technical report', intent: 'research_and_technical', recency_days: 90, result_limit: config.limits.results_per_query }\n  ].slice(0, config.limits.max_queries);\n}\n\nconst seen = new Set();\nqueries = queries.filter((q) => {\n  const key = q.query.toLowerCase().replace(/\\s+/g, ' ');\n  if (seen.has(key)) return false;\n  seen.add(key);\n  return true;\n}).slice(0, config.limits.max_queries);\n\nconst usage = response.usage ?? {};\nconst inputTokens = Number(usage.input_tokens ?? 0);\nconst outputTokens = Number(usage.output_tokens ?? 0);\nconst estimatedCost = (inputTokens * config.pricing_per_million_tokens.input + outputTokens * config.pricing_per_million_tokens.output) / 1000000;\n\nreturn [{\n  json: {\n    ...seed,\n    query_items: queries.map((query, index) => ({ ...query, query_index: index + 1 })),\n    planner_fallback_used: Boolean(plannerError),\n    planner_error_code: plannerError,\n    planner_usage: {\n      workspace_id: config.workspace_id,\n      research_run_id: seed.research_run_id,\n      request_id: uuid(),\n      workflow: 'RE 00 Research Engine',\n      agent: 'query_planner',\n      operation: 'structured_query_plan',\n      provider: 'openai',\n      model: response.model ?? config.query_model,\n      model_tier: 0,\n      input_tokens: inputTokens,\n      output_tokens: outputTokens,\n      estimated_cost_usd: Number(estimatedCost.toFixed(6)),\n      latency_ms: 0,\n      success: !plannerError,\n      error_code: plannerError,\n      prompt_version: config.query_prompt_version,\n      schema_version: 'query-plan-v1.0.0'\n    }\n  }\n}];"
+      },
+      "id": "2253a3c9-322b-48ff-8fcd-6cbbc4d168f5",
+      "name": "Parse Query Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2048,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Validate and Prepare Run').item.json.config.supabase_url + '/rest/v1/llm_usage' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Parse Query Plan').item.json.planner_usage) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "bf633023-5be7-4789-8430-c7d5d9b92065",
+      "name": "Record Planner Usage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2304,
+        528
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const plan = $('Parse Query Plan').first().json;\nconst config = plan.config;\nconst jobs = [];\nconst maxTavily = Math.max(1, Math.min(5, Number(config.limits.max_tavily_queries ?? 3)));\nconst planned = Array.isArray(plan.query_items) ? plan.query_items : [];\nconst standardCount = Math.max(1, maxTavily - 1);\nconst topicTerms = String(config.topic ?? '')\n  .split(',')\n  .map((term) => term.trim())\n  .filter(Boolean);\n\nplanned.slice(0, standardCount).forEach((query, index) => {\n  jobs.push({\n    adapter: 'tavily',\n    channel: index === 0 ? 'web_search' : 'official_and_capital_search',\n    source_tier: index === 0 ? 'search' : 'primary_discovery',\n    query: query.query,\n    intent: query.intent,\n    result_limit: query.result_limit ?? config.limits.results_per_query,\n    recency_days: query.recency_days ?? 30\n  });\n});\n\nif (maxTavily > standardCount) {\n  const domains = (config.ecosystem_domains ?? []).slice(0, 10);\n  const siteQuery = domains.map((domain) => 'site:' + domain).join(' OR ');\n  jobs.push({\n    adapter: 'tavily',\n    channel: 'ecosystem_and_community',\n    source_tier: 'primary_discovery',\n    query: config.topic + ' (\"announces investment\" OR \"funding round\" OR \"new fund\" OR \"investment thesis\" OR \"portfolio company\" OR \"accelerator cohort\") ' + (siteQuery ? '(' + siteQuery + ')' : ''),\n    intent: 'market_activity',\n    result_limit: config.limits.results_per_query,\n    recency_days: 30\n  });\n}\n\nconst hnQueryLimit = Math.max(1, Math.min(6, Number(config.limits.hn_queries ?? 4)));\nconst hnQueries = [...new Set([\n  ...topicTerms,\n  ...(config.entities ?? []).map((entity) => String(entity).trim())\n].filter(Boolean))].slice(0, hnQueryLimit);\n\n(hnQueries.length ? hnQueries : [config.domain_key]).forEach((query) => jobs.push({\n  adapter: 'hacker_news',\n  channel: 'hacker_news',\n  source_tier: 'structured_community',\n  query,\n  intent: 'community_signal',\n  result_limit: Math.max(1, Math.min(20, Number(config.limits.hn_results ?? 8))),\n  date_from_unix: Math.floor(new Date(config.date_from).getTime() / 1000)\n}));\n\njobs.push({\n  adapter: 'arxiv',\n  channel: 'arxiv',\n  source_tier: 'research',\n  query: topicTerms.slice(0, 4).join(' OR '),\n  intent: 'research_and_technical',\n  result_limit: Math.max(1, Math.min(10, Number(config.limits.arxiv_results ?? 5))),\n  from_publication_date: String(config.date_from ?? '').slice(0, 10),\n  to_publication_date: String(config.date_to ?? '').slice(0, 10)\n});\n\n// GDELT's public DOC endpoint asks clients to stay at one request per five\n// seconds. Keep one larger query per domain run to avoid a rate-limit burst.\nconst gdeltLimit = 1;\nplanned.slice(0, gdeltLimit).forEach((query) => jobs.push({\n  adapter: 'gdelt',\n  channel: 'global_news',\n  source_tier: 'news_aggregator',\n  query: topicTerms.slice(0, 5)\n    .map((term) => term.split(/\\s+/).slice(0, 4).join(' '))\n    .filter(Boolean)\n    .map((term) => term.includes(' ') ? '\"' + term.replace(/\"/g, '') + '\"' : term)\n    .join(' OR '),\n  intent: query.intent,\n  result_limit: Math.max(1, Math.min(50, Number(config.limits.gdelt_results ?? 20))),\n  start_datetime: String(config.date_from ?? '').replace(/[-:TZ.]/g, '').slice(0, 14),\n  end_datetime: String(config.date_to ?? '').replace(/[-:TZ.]/g, '').slice(0, 14)\n}));\n\n(config.monitored_feeds ?? []).slice(0, 12).forEach((feed) => {\n  if (!feed?.url) return;\n  jobs.push({\n    adapter: 'rss',\n    channel: 'monitored_feed',\n    source_tier: feed.source_tier ?? 'primary',\n    feed_url: feed.url,\n    feed_name: feed.name ?? feed.url,\n    query: config.topic,\n    intent: feed.intent ?? 'current_news',\n    result_limit: Math.max(1, Math.min(20, Number(feed.limit ?? 10)))\n  });\n});\n\nreturn jobs.map((job, index) => ({\n  json: {\n    config,\n    research_run_id: plan.research_run_id,\n    request_id: plan.request_id,\n    job_id: 'discovery:' + index,\n    ...job\n  },\n  pairedItem: { item: 0 }\n}));"
+      },
+      "id": "a768b23f-3e72-411c-970c-dd827a3840ed",
+      "name": "Build Discovery Jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2560,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputRows = $input.all().map((item) => item.json ?? {});\nconst jobResults = [];\nconst fanInErrors = [];\nfor (const row of inputRows) {\n  if (Array.isArray(row.candidates)) {\n    jobResults.push(row);\n    continue;\n  }\n  if (row.original_url || row.canonical_url) {\n    jobResults.push({\n      provider: row.discovery_provider ?? 'unknown',\n      candidates: [row],\n      provider_error: null\n    });\n    continue;\n  }\n  fanInErrors.push({\n    provider: row.provider ?? row.adapter ?? 'discovery_orchestrator',\n    code: row.error ? 'DISCOVERY_ADAPTER_ERROR' : 'INVALID_DISCOVERY_ENVELOPE'\n  });\n}\nconst seed = $('Validate and Prepare Run').first().json;\nconst config = seed.config;\nconst normalizeText = (value) => String(value ?? '').trim().replace(/\\s+/g, ' ');\nconst tracking = new Set(['utm_source','utm_medium','utm_campaign','utm_term','utm_content','utm_id','gclid','fbclid','mc_cid','mc_eid','ref','ref_src','source']);\nconst stopwords = new Set(['about','after','again','against','also','and','are','been','before','being','between','from','into','its','more','most','new','official','other','over','published','the','their','then','there','these','this','those','through','under','very','with']);\n\nfunction parseHttpUrl(rawUrl) {\n  const raw = normalizeText(rawUrl);\n  const match = raw.match(/^(https?):\\/\\/([^/?#]+)([^?#]*)(\\?[^#]*)?(?:#.*)?$/i);\n  if (!match) return null;\n\n  const protocol = match[1].toLowerCase() + ':';\n  const authority = match[2];\n  if (!authority || authority.includes('@') || /\\s|\\\\/.test(authority)) return null;\n\n  let hostname = authority;\n  let port = '';\n  if (authority.startsWith('[')) {\n    const ipv6 = authority.match(/^\\[([0-9a-f:.]+)\\](?::(\\d+))?$/i);\n    if (!ipv6) return null;\n    hostname = '[' + ipv6[1].toLowerCase() + ']';\n    port = ipv6[2] ?? '';\n  } else {\n    const colon = authority.lastIndexOf(':');\n    if (colon >= 0) {\n      if (authority.indexOf(':') !== colon) return null;\n      hostname = authority.slice(0, colon);\n      port = authority.slice(colon + 1);\n    }\n    hostname = hostname.toLowerCase().replace(/\\.$/, '');\n    if (!hostname || !/^[a-z0-9.-]+$/i.test(hostname) || hostname.includes('..')) return null;\n  }\n\n  if (port && (!/^\\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535)) return null;\n  if ((protocol === 'https:' && port === '443') || (protocol === 'http:' && port === '80')) port = '';\n\n  let pathname = match[3] || '/';\n  if (/\\s|\\\\/.test(pathname)) return null;\n  pathname = pathname.replace(/\\/{2,}/g, '/').replace(/\\/$/, '') || '/';\n\n  const keptParams = [];\n  for (const part of (match[4] ?? '').slice(1).split('&').filter(Boolean)) {\n    const rawKey = part.split('=', 1)[0];\n    let key;\n    try { key = decodeURIComponent(rawKey.replace(/\\+/g, ' ')).toLowerCase(); }\n    catch { key = rawKey.toLowerCase(); }\n    if (!tracking.has(key) && !key.startsWith('utm_')) keptParams.push(part);\n  }\n  keptParams.sort((a, b) => a.localeCompare(b));\n\n  const hostWithPort = hostname + (port ? ':' + port : '');\n  const canonicalUrl = protocol + '//' + hostWithPort + pathname + (keptParams.length ? '?' + keptParams.join('&') : '');\n  return {\n    url: { pathname },\n    hostname: hostname.replace(/^www\\./, ''),\n    canonical_url: canonicalUrl\n  };\n}\n\nfunction tokens(value) {\n  return new Set((String(value ?? '').toLowerCase().match(/[a-z0-9][a-z0-9-]{2,}/g) ?? [])\n    .filter((token) => !stopwords.has(token)));\n}\n\nfunction overlap(query, text) {\n  const q = tokens(query);\n  const t = tokens(text);\n  if (!q.size) return 0;\n  let matches = 0;\n  for (const token of q) if (t.has(token)) matches++;\n  return Math.min(1, matches / Math.max(3, Math.min(8, q.size)));\n}\n\nfunction qualityFor(raw, host) {\n  if (raw.source_tier === 'primary' || raw.source_tier === 'primary_discovery') return 0.90;\n  if (raw.source_tier === 'research') return 0.88;\n  if (raw.source_tier === 'structured_community') return 0.68;\n  if (raw.source_tier === 'news_aggregator') return 0.62;\n  if (raw.source_tier === 'ecosystem') return 0.64;\n  if (host.endsWith('.gov') || host.endsWith('.gov.in') || host.endsWith('.edu') || host.endsWith('europa.eu')) return 0.95;\n  if (host === 'arxiv.org' || host === 'github.com' || host === 'who.int' || host === 'oecd.org') return 0.88;\n  if ((config.preferred_domains ?? []).some((domain) => host === domain || host.endsWith('.' + domain))) return 0.90;\n  return 0.65;\n}\n\nfunction sourceType(raw, parsed) {\n  if (raw.source_type) return raw.source_type;\n  const text = (raw.title + ' ' + parsed.url.pathname).toLowerCase();\n  if (parsed.hostname === 'arxiv.org' || /paper|research|whitepaper/.test(text)) return 'paper';\n  if (parsed.hostname === 'github.com') return 'repository';\n  if (/press-release|newsroom|press_release/.test(text)) return 'press_release';\n  if (/filing|10-k|10-q|8-k/.test(text)) return 'filing';\n  return 'article';\n}\n\nconst deduplicated = new Map();\nconst providerErrors = [...fanInErrors];\nfor (const result of jobResults) {\n  if (result.provider_error) providerErrors.push({ provider: result.provider, code: result.provider_error });\n  for (const [index, raw] of (result.candidates ?? []).entries()) {\n    const parsed = parseHttpUrl(raw.original_url);\n    if (!parsed) {\n      providerErrors.push({\n        provider: raw.discovery_provider ?? result.provider ?? 'unknown',\n        code: 'INVALID_PROVIDER_URL'\n      });\n      continue;\n    }\n    const host = parsed.hostname;\n    const blocked = (config.blocked_domains ?? []).some((domain) => host === domain || host.endsWith('.' + domain));\n    const socialDiscoveryOnly = host === 'reddit.com' || host.endsWith('.reddit.com') || host === 'x.com' || host === 'twitter.com';\n    const title = normalizeText(raw.title).slice(0, 500) || host;\n    const snippet = normalizeText(raw.snippet).slice(0, 3000);\n    const providerScore = Math.max(0, Math.min(1, Number(raw.provider_score ?? 0.5)));\n    const lexical = Math.max(\n      overlap(raw.query, title + ' ' + snippet),\n      overlap(config.topic, title + ' ' + snippet)\n    );\n    const quality = qualityFor(raw, host);\n    const relevance = Math.max(0, Math.min(1, providerScore * 0.55 + lexical * 0.25 + quality * 0.20));\n    const reasonCodes = [...new Set(raw.reason_codes ?? [])];\n    if (blocked) reasonCodes.push('BLOCKED_DOMAIN');\n    if (socialDiscoveryOnly) reasonCodes.push('DISCOVERY_ONLY_SOCIAL_SOURCE');\n    if (lexical >= 0.25) reasonCodes.push('TOPIC_MATCH');\n    if (quality >= 0.85) reasonCodes.push('PRIMARY_OR_HIGH_QUALITY_SOURCE');\n    if (relevance < config.thresholds.min_relevance) reasonCodes.push('LOW_RELEVANCE');\n\n    const candidate = {\n      candidate_id: raw.provider_request_id || raw.discovery_provider + ':' + index + ':' + parsed.canonical_url,\n      config,\n      workspace_id: config.workspace_id,\n      workspace_domain_id: config.workspace_domain_id,\n      research_run_id: seed.research_run_id,\n      request_id: seed.request_id,\n      discovery_channel: raw.discovery_channel,\n      discovery_provider: raw.discovery_provider,\n      discovery_providers: [raw.discovery_provider].filter(Boolean),\n      discovery_queries: [raw.query].filter(Boolean),\n      query: raw.query,\n      query_intent: raw.query_intent,\n      result_rank: raw.result_rank ?? index + 1,\n      discovered_at: new Date().toISOString(),\n      original_url: normalizeText(raw.original_url),\n      canonical_url: parsed.canonical_url,\n      title,\n      snippet,\n      publisher: host,\n      author: raw.author ?? null,\n      published_at: raw.published_at ?? null,\n      language: raw.language ?? 'en',\n      source_country: raw.source_country ?? null,\n      source_type: sourceType(raw, parsed),\n      source_tier: raw.source_tier ?? 'search',\n      relevance_score: Number(relevance.toFixed(3)),\n      source_quality_score: Number(quality.toFixed(3)),\n      provider_score: Number(providerScore.toFixed(3)),\n      reason_codes: [...new Set(reasonCodes)],\n      should_extract: !blocked && !socialDiscoveryOnly && relevance >= config.thresholds.min_relevance && quality >= config.thresholds.min_source_quality,\n      embedded_content: normalizeText(raw.embedded_content) || null,\n      provider_request_id: raw.provider_request_id ?? null,\n      discussion_url: raw.discussion_url ?? null\n    };\n\n    const existing = deduplicated.get(candidate.canonical_url);\n    if (!existing) {\n      deduplicated.set(candidate.canonical_url, candidate);\n      continue;\n    }\n    const queries = [...new Set([...(existing.discovery_queries ?? []), ...candidate.discovery_queries])];\n    const providers = [...new Set([\n      ...(existing.discovery_providers ?? [existing.discovery_provider]),\n      ...(candidate.discovery_providers ?? [candidate.discovery_provider])\n    ].filter(Boolean))];\n    if (candidate.relevance_score > existing.relevance_score) {\n      candidate.discovery_queries = queries;\n      candidate.discovery_providers = providers;\n      deduplicated.set(candidate.canonical_url, candidate);\n    } else {\n      existing.discovery_queries = queries;\n      existing.discovery_providers = providers;\n    }\n  }\n}\n\nlet candidates = [...deduplicated.values()].sort((a, b) =>\n  Number(b.should_extract) - Number(a.should_extract) ||\n  b.relevance_score - a.relevance_score ||\n  b.source_quality_score - a.source_quality_score\n);\n\ncandidates = candidates.slice(0, config.limits.max_candidates);\n\nconst firecrawlLimit = Math.max(0, Math.min(10, Number(config.limits.max_firecrawl_candidates ?? 2)));\nlet firecrawlAllocated = 0;\nfor (const candidate of candidates) {\n  if (!candidate.should_extract || candidate.embedded_content) continue;\n  if (firecrawlAllocated < firecrawlLimit) {\n    firecrawlAllocated++;\n    candidate.firecrawl_budget_rank = firecrawlAllocated;\n  } else {\n    candidate.should_extract = false;\n    candidate.reason_codes = [...new Set([...(candidate.reason_codes ?? []), 'FIRECRAWL_BUDGET_EXCEEDED'])];\n  }\n}\n\nif (!candidates.length) {\n  candidates = [{\n    candidate_id: 'no-results', config,\n    workspace_id: config.workspace_id,\n    workspace_domain_id: config.workspace_domain_id,\n    research_run_id: seed.research_run_id,\n    request_id: seed.request_id,\n    canonical_url: null, original_url: null,\n    title: 'No usable multi-source results', should_extract: false,\n    discovery_provider: 'discovery_orchestrator',\n    discovery_channel: 'multi_source',\n    reason_codes: ['NO_SEARCH_RESULTS'], provider_errors: providerErrors,\n    relevance_score: 0, source_quality_score: 0\n  }];\n}\n\nreturn candidates.map((candidate, index) => ({\n  json: { ...candidate, discovery_provider_errors: providerErrors },\n  pairedItem: { item: Math.min(index, Math.max(0, jobResults.length - 1)) }\n}));"
+      },
+      "id": "d506edb9-c8c3-46a2-be86-9d8e20f988c4",
+      "name": "Normalize and Dedupe Candidates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4384,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "reset": false
+        }
+      },
+      "id": "a0763689-833f-457f-8f19-06137cfc2a86",
+      "name": "Candidate Loop - One at a Time",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        4624,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "96894d59-176e-4b72-adde-daa56f835986",
+              "leftValue": "={{ Boolean($json.canonical_url) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "301e34c2-38d0-4d10-95b1-2aa95e435114",
+      "name": "Has Valid Canonical URL?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4864,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cbfb012f-18c4-4f27-a4a1-556a9cde28ca",
+              "leftValue": "={{ Boolean($json.should_extract) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "6143a94c-3cbf-4c51-b1d4-e2518aba1efc",
+      "name": "Meets Relevance Gate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5104,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.config.supabase_url + '/rest/v1/sources' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "select",
+              "value": "id,canonical_url,content_hash"
+            },
+            {
+              "name": "workspace_id",
+              "value": "=eq.{{ $json.workspace_id }}"
+            },
+            {
+              "name": "canonical_url",
+              "value": "=eq.{{ $json.canonical_url }}"
+            },
+            {
+              "name": "deleted_at",
+              "value": "is.null"
+            },
+            {
+              "name": "limit",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "ae759224-c815-4bdb-aba3-69ccbe3fc260",
+      "name": "Lookup Existing Source",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5328,
+        576
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 800,
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const candidate = $('Candidate Loop - One at a Time').item.json;\nconst response = $input.first().json;\nconst rows = Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : []);\nconst existing = rows[0] ?? null;\n\nreturn [{\n  json: {\n    ...candidate,\n    existing_source_id: existing?.id ?? null,\n    existing_content_hash: existing?.content_hash ?? null,\n    source_lookup_failed: Boolean(response?.error && !existing)\n  }\n}];"
+      },
+      "id": "f276979d-45e8-4b42-955c-5dd774d6e54f",
+      "name": "Resolve Existing Source",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5552,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "61a62d0d-cbe2-467d-aaa8-08987c861994",
+              "leftValue": "={{ Boolean($json.existing_source_id) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b2da9320-6fff-4d4c-ab3f-9e1abc170135",
+      "name": "Already Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5792,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const candidate = $('Resolve Existing Source').item.json;\nconst response = $input.first().json ?? {};\nconst data = response.data && typeof response.data === 'object' ? response.data : response;\nconst metadata = data.metadata ?? response.metadata ?? {};\nconst raw = String(data.markdown ?? response.markdown ?? data.content ?? response.content ?? '');\nconst maxChars = candidate.config.limits.max_source_chars;\n\nlet content = raw\n  .replace(/data:image\\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=\\s]+/g, '')\n  .replace(/\\[(?:Skip to content|Menu|Search)\\]\\([^)]*\\)/gi, '')\n  .replace(/\\n{4,}/g, '\\n\\n\\n')\n  .replace(/[ \\t]{3,}/g, '  ')\n  .trim();\n\nconst originalLength = content.length;\nconst wasTruncated = originalLength > maxChars;\nif (wasTruncated) content = content.slice(0, maxChars);\n\nconst tooShort = content.length < candidate.config.limits.min_content_chars;\nconst extractionFailed = !content || response.error || data.error || response.success === false || data.success === false;\nconst contentStatus = extractionFailed ? 'failed' : (tooShort ? 'partial' : 'success');\nconst reasonCodes = [...new Set([\n  ...(candidate.reason_codes ?? []),\n  ...(extractionFailed ? ['EXTRACTION_FAILED'] : []),\n  ...(tooShort && !extractionFailed ? ['CONTENT_TOO_SHORT'] : []),\n  ...(wasTruncated ? ['CONTENT_TRUNCATED'] : [])\n])];\n\nreturn [{\n  json: {\n    ...candidate,\n    content_text: content || null,\n    content_status: contentStatus,\n    extraction_method: 'firecrawl-v2-markdown',\n    extracted_at: new Date().toISOString(),\n    extracted_char_count: originalLength,\n    publisher: candidate.publisher ?? metadata.ogSiteName ?? metadata.sourceURL ?? null,\n    author: candidate.author ?? metadata.author ?? null,\n    published_at: candidate.published_at ?? metadata.publishedTime ?? null,\n    language: metadata.language ?? candidate.language ?? 'en',\n    reason_codes: reasonCodes,\n    firecrawl_warning: response.warning ?? data.warning ?? null,\n    firecrawl_status_code: metadata.statusCode ?? null\n  },\n  pairedItem: { item: 0 }\n}];"
+      },
+      "id": "b0a7067f-feee-4a31-a733-9fb76f400e17",
+      "name": "Normalize Extracted Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6656,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst item = $input.first().json;\nconst config = item.config;\n\nconst uuid = () => {\n  const b = crypto.randomBytes(16);\n  b[6] = (b[6] & 0x0f) | 0x40;\n  b[8] = (b[8] & 0x3f) | 0x80;\n  const h = b.toString('hex');\n  return h.slice(0,8) + '-' + h.slice(8,12) + '-' + h.slice(12,16) + '-' + h.slice(16,20) + '-' + h.slice(20);\n};\n\nconst isDuplicate = Boolean(item.existing_source_id);\nconst hasContent = typeof item.content_text === 'string' && item.content_text.length > 0;\nconst hash = hasContent ? 'sha256:' + crypto.createHash('sha256').update(item.content_text, 'utf8').digest('hex') : null;\nconst contentStatus = isDuplicate ? 'pending' : (item.content_status ?? 'pending');\n\nlet decision = 'needs_review';\nconst reasons = [...new Set(item.reason_codes ?? [])];\nif (isDuplicate) {\n  decision = 'duplicate';\n  reasons.push('DUPLICATE_CANONICAL_URL');\n} else if (!item.should_extract) {\n  decision = 'rejected';\n  if (!reasons.includes('LOW_RELEVANCE')) reasons.push('LOW_RELEVANCE');\n} else if (!hasContent || contentStatus === 'failed' || contentStatus === 'blocked') {\n  decision = 'rejected';\n  reasons.push('EXTRACTION_FAILED');\n} else if (contentStatus === 'partial') {\n  decision = 'needs_review';\n} else {\n  decision = 'needs_review';\n}\n\nconst sourceId = item.existing_source_id ?? uuid();\nconst eligible = !isDuplicate && hasContent && contentStatus === 'success' && item.relevance_score >= config.thresholds.min_relevance;\n\nconst sourceContract = {\n  schema_version: config.contract_version,\n  source_id: sourceId,\n  workspace_id: item.workspace_id,\n  workspace_domain_id: item.workspace_domain_id,\n  collection_run_id: item.research_run_id,\n  source_type: item.source_type ?? 'article',\n  discovery: {\n    channel: item.discovery_channel ?? 'web_search',\n    provider: item.discovery_provider ?? 'tavily',\n    query: item.query ?? null,\n    result_rank: Number(item.result_rank || 1),\n    external_result_id: item.provider_request_id ?? null,\n    discovered_at: item.discovered_at ?? new Date().toISOString()\n  },\n  identity: {\n    original_url: item.original_url,\n    canonical_url: item.canonical_url,\n    title: item.title,\n    publisher: item.publisher ?? null,\n    author: item.author ?? null,\n    language: item.language ?? 'en',\n    published_at: item.published_at ?? null\n  },\n  content: {\n    text: hasContent ? item.content_text : null,\n    summary: null,\n    content_hash: hash,\n    extraction_method: hasContent ? (item.extraction_method ?? 'firecrawl-v2-markdown') : null,\n    extracted_at: hasContent ? (item.extracted_at ?? new Date().toISOString()) : null,\n    status: contentStatus\n  },\n  classification: {\n    domain_key: config.domain_key,\n    topics: [config.topic],\n    geographies: config.geographies,\n    entity_types: [],\n    relevance_score: Number(item.relevance_score ?? 0),\n    source_quality_score: Number(item.source_quality_score ?? 0),\n    decision,\n    reason_codes: [...new Set(reasons)]\n  },\n  verification: {\n    status: hasContent ? 'partially_verified' : 'unverified',\n    checked_at: new Date().toISOString(),\n    checks: [\n      { type: 'canonical_url_present', passed: Boolean(item.canonical_url), details: null },\n      { type: 'content_extracted', passed: hasContent, details: contentStatus }\n    ]\n  },\n  metadata: {\n    storage_class: 'S0',\n    provider: {\n      search_request_id: item.provider_request_id ?? null,\n      firecrawl_status_code: item.firecrawl_status_code ?? null,\n      warning: item.firecrawl_warning ?? null\n    },\n    discovery_queries: item.discovery_queries ?? [item.query].filter(Boolean),\n    engine_version: config.engine_version\n  }\n};\n\nreturn [{\n  json: {\n    ...item,\n    source_id: sourceId,\n    content_hash: hash,\n    source_decision: decision,\n    eligible_for_evidence: eligible,\n    source_contract: sourceContract\n  }\n}];"
+      },
+      "id": "67bd7c12-20e8-4c32-843d-0206b6ca3e97",
+      "name": "Prepare Source Persistence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6896,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Validate and Prepare Run').first().json.config.supabase_url + '/rest/v1/rpc/n8n_record_research_source' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_source: $json.source_contract }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "45f8401e-7a09-4543-b761-ec11cf30e841",
+      "name": "Persist Source via RPC",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7136,
+        576
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const prepared = $('Prepare Source Persistence').first().json;\nconst persisted = $input.first().json ?? {};\nconst sourcePersisted = Boolean(persisted.source_id);\nconst eligibleForEvidence = Boolean(prepared.eligible_for_evidence && sourcePersisted);\n\nreturn [{\n  json: {\n    ...prepared,\n    source_id: persisted.source_id ?? prepared.source_id,\n    source_match_type: persisted.match_type ?? null,\n    source_decision: persisted.decision ?? prepared.source_decision,\n    source_is_new: Boolean(persisted.is_new),\n    source_persisted: sourcePersisted,\n    eligible_for_evidence: eligibleForEvidence,\n    evidence_reprocessing_reason: eligibleForEvidence && !persisted.is_new\n      ? 'CURRENT_EXTRACTION_MATCHED_EXISTING_CONTENT'\n      : null\n  },\n  pairedItem: { item: 0 }\n}];"
+      },
+      "id": "04797eb2-dc38-4de5-bf0b-9ef82f3d4dd9",
+      "name": "Restore Persisted Source Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7376,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fbb56546-7e2d-451c-a3f0-aa02148ac807",
+              "leftValue": "={{ Boolean($json.source_is_new && $json.content_text) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "793b730c-20d6-4ceb-ae1a-688453199bb8",
+      "name": "Should Store Source Content?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        7616,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.config.supabase_url + '/storage/v1/object/research-content/' + $json.workspace_id + '/' + $json.research_run_id + '/' + $json.source_id + '.md' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "text/markdown; charset=utf-8"
+            },
+            {
+              "name": "x-upsert",
+              "value": "false"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/markdown; charset=utf-8",
+        "body": "={{ $json.content_text }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "64ffc60b-6007-4035-9c94-83c2c0444d01",
+      "name": "Upload Source Content",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7856,
+        608
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Restore Persisted Source Context').item.json;\nconst response = $input.first().json ?? {};\nconst expectedPath = source.workspace_id + '/' + source.research_run_id + '/' + source.source_id + '.md';\nconst stored = Boolean(response.Key || response.key || response.Id || response.id);\n\nreturn [{\n  json: {\n    ...source,\n    content_stored: stored,\n    content_storage_path: stored ? expectedPath : null,\n    content_storage_failed: !stored\n  }\n}];"
+      },
+      "id": "7f61cb64-69f1-4ed1-90c6-c7f5e17b0821",
+      "name": "Evaluate Content Upload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8096,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8681fc90-4611-42e9-a2dc-6ec3187e5808",
+              "leftValue": "={{ Boolean($json.content_stored) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f1907cad-5ee8-4af8-9528-28b8ac46a88e",
+      "name": "Content Stored?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        8336,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $json.config.supabase_url + '/rest/v1/sources?id=eq.' + $json.source_id + '&workspace_id=eq.' + $json.workspace_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ content_storage_path: $json.content_storage_path }) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "dee41eed-b1f3-4fcd-ac08-e0420a18243f",
+      "name": "Update Source Storage Path",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8576,
+        544
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 800,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Evaluate Content Upload').item.json;\nreturn [{ json: { ...source, content_stored: true, content_storage_failed: false } }];"
+      },
+      "id": "45eb0d88-fb5d-403d-bd9d-0a55d1289bc9",
+      "name": "Restore Stored Source Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8816,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b8e3d52a-3a23-498c-ac8f-de2b5e5eef28",
+              "leftValue": "={{ Boolean($json.eligible_for_evidence) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7a2bc9f3-85be-4433-b388-3b8291bfd52c",
+      "name": "Eligible for Evidence?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        9056,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $input.first().json;\nconst config = source.config;\n\nconst schema = {\n  type: 'object',\n  additionalProperties: false,\n  properties: {\n    items: {\n      type: 'array',\n      minItems: 0,\n      maxItems: config.limits.max_evidence_per_source,\n      items: {\n        type: 'object',\n        additionalProperties: false,\n        properties: {\n          evidence_type: { type: 'string', enum: ['fact', 'quote', 'metric', 'event', 'claim', 'counter_claim'] },\n          claim_text: { type: 'string' },\n          excerpt: { type: 'string' },\n          locator: {\n            type: 'object',\n            additionalProperties: false,\n            properties: {\n              section: { type: 'string' },\n              paragraph: { type: 'integer' }\n            },\n            required: ['section', 'paragraph']\n          },\n          polarity: { type: 'string', enum: ['supports', 'contradicts', 'neutral'] },\n          confidence: { type: 'number', minimum: 0, maximum: 1 }\n        },\n        required: ['evidence_type', 'claim_text', 'excerpt', 'locator', 'polarity', 'confidence']\n      }\n    }\n  },\n  required: ['items']\n};\n\nconst sourceInput = {\n  title: source.title,\n  canonical_url: source.canonical_url,\n  publisher: source.publisher,\n  published_at: source.published_at,\n  research_objective: config.objective,\n  maximum_items: config.limits.max_evidence_per_source,\n  source_text: source.content_text\n};\n\nreturn [{\n  json: {\n    ...source,\n    openai_request: {\n      model: config.evidence_model,\n      instructions: 'Extract only decision-useful evidence explicitly supported by the supplied source. Every excerpt must be copied from the supplied source text, with no paraphrasing inside excerpt. Claims must be concise normalized propositions. Do not use outside knowledge. Do not infer missing dates, actors, amounts, or causality. Return an empty items array when the source contains no suitable evidence.',\n      input: [{\n        role: 'user',\n        content: [{ type: 'input_text', text: JSON.stringify(sourceInput) }]\n      }],\n      text: {\n        format: {\n          type: 'json_schema',\n          name: 'research_evidence_items',\n          strict: true,\n          schema\n        }\n      },\n      max_output_tokens: config.limits.max_openai_output_tokens,\n      store: false\n    }\n  }\n}];"
+      },
+      "id": "cb30d90c-e83c-499f-8aca-a4319ec02379",
+      "name": "Build Evidence Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        9296,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.openai_request) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "98def728-9fa5-475e-991b-e943cbe7f1a6",
+      "name": "OpenAI Evidence Extraction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        9536,
+        464
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1800,
+      "alwaysOutputData": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "7a0hdZ68ejgk6EnD",
+          "name": "OpenAI account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json ?? {};\nconst source = $('Build Evidence Request').item.json;\nconst config = source.config;\nconst crypto = require('crypto');\n\nconst uuid = () => {\n  const b = crypto.randomBytes(16);\n  b[6] = (b[6] & 0x0f) | 0x40;\n  b[8] = (b[8] & 0x3f) | 0x80;\n  const h = b.toString('hex');\n  return h.slice(0,8) + '-' + h.slice(8,12) + '-' + h.slice(12,16) + '-' + h.slice(16,20) + '-' + h.slice(20);\n};\n\nconst outputText = (response.output ?? [])\n  .flatMap((item) => item.content ?? [])\n  .find((content) => content.type === 'output_text')?.text;\n\nlet parsed = null;\nlet modelError = null;\ntry {\n  parsed = outputText ? JSON.parse(outputText) : null;\n} catch {\n  modelError = 'EVIDENCE_OUTPUT_INVALID_JSON';\n}\nif (!Array.isArray(parsed?.items)) modelError = modelError || 'EVIDENCE_OUTPUT_MISSING';\n\nconst normalizeWhitespace = (value) => String(value ?? '').replace(/\\s+/g, ' ').trim();\nconst normalizedSource = normalizeWhitespace(source.content_text);\nconst allowedTypes = new Set(['fact', 'quote', 'metric', 'event', 'claim', 'counter_claim']);\nconst allowedPolarity = new Set(['supports', 'contradicts', 'neutral']);\nconst grounded = [];\nlet rejectedCount = 0;\n\nfor (const raw of (parsed?.items ?? []).slice(0, config.limits.max_evidence_per_source)) {\n  const excerpt = normalizeWhitespace(raw.excerpt);\n  const claim = normalizeWhitespace(raw.claim_text);\n  const confidence = Math.max(0, Math.min(1, Number(raw.confidence ?? 0)));\n  const exactGrounding = excerpt.length >= 20 && normalizedSource.includes(excerpt);\n  const structurallyValid = allowedTypes.has(raw.evidence_type) && allowedPolarity.has(raw.polarity) && claim.length >= 10 && claim.length <= 1000;\n  if (!exactGrounding || !structurallyValid || confidence < config.thresholds.min_evidence_confidence) {\n    rejectedCount++;\n    continue;\n  }\n\n  grounded.push({\n    id: uuid(),\n    workspace_id: source.workspace_id,\n    source_id: source.source_id,\n    research_run_id: source.research_run_id,\n    evidence_type: raw.evidence_type,\n    claim_text: claim,\n    excerpt,\n    locator: {\n      section: String(raw.locator?.section ?? '').slice(0, 300),\n      paragraph: Math.max(0, Number(raw.locator?.paragraph ?? 0))\n    },\n    polarity: raw.polarity,\n    confidence,\n    verification_status: 'verified',\n    extractor_version: config.prompt_version,\n    metadata: {\n      schema_version: 'evidence-v1.0.0',\n      model_request_id: response.id ?? null,\n      model: response.model ?? config.evidence_model,\n      exact_excerpt_match: true,\n      review_mode: config.automation_mode\n    }\n  });\n}\n\nconst usage = response.usage ?? {};\nconst inputTokens = Number(usage.input_tokens ?? 0);\nconst outputTokens = Number(usage.output_tokens ?? 0);\nconst estimatedCost = (inputTokens * config.pricing_per_million_tokens.input + outputTokens * config.pricing_per_million_tokens.output) / 1000000;\nif (estimatedCost > config.limits.max_estimated_openai_cost_usd) modelError = modelError || 'RUN_OPENAI_COST_CAP_EXCEEDED';\n\nreturn [{\n  json: {\n    ...source,\n    evidence_items: grounded,\n    evidence_rejected_count: rejectedCount,\n    evidence_model_error: modelError,\n    evidence_usage: {\n      workspace_id: source.workspace_id,\n      research_run_id: source.research_run_id,\n      request_id: uuid(),\n      workflow: 'RE 00 Research Engine',\n      agent: 'evidence_extractor',\n      operation: 'structured_evidence_extraction',\n      provider: 'openai',\n      model: response.model ?? config.evidence_model,\n      model_tier: 0,\n      input_tokens: inputTokens,\n      output_tokens: outputTokens,\n      estimated_cost_usd: Number(estimatedCost.toFixed(6)),\n      latency_ms: 0,\n      success: !modelError,\n      error_code: modelError,\n      prompt_version: config.prompt_version,\n      schema_version: 'evidence-v1.0.0'\n    }\n  }\n}];"
+      },
+      "id": "e4007870-399d-45c4-8eaa-5a602c627ede",
+      "name": "Parse and Verify Evidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        9776,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Validate and Prepare Run').item.json.config.supabase_url + '/rest/v1/llm_usage' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Parse and Verify Evidence').item.json.evidence_usage) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "ead4b384-6fec-46cb-a081-660d191a8ab3",
+      "name": "Record Evidence LLM Usage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        10016,
+        464
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const parsed = $('Parse and Verify Evidence').item.json;\nif (!parsed.evidence_items.length) {\n  return [{\n    json: {\n      ...parsed,\n      has_evidence: false,\n      evidence_contract: null\n    }\n  }];\n}\n\nreturn parsed.evidence_items.map((evidence, index) => ({\n  json: {\n    candidate_id: parsed.candidate_id,\n    config: parsed.config,\n    workspace_id: parsed.workspace_id,\n    workspace_domain_id: parsed.workspace_domain_id,\n    research_run_id: parsed.research_run_id,\n    request_id: parsed.request_id,\n    source_id: parsed.source_id,\n    canonical_url: parsed.canonical_url,\n    source_decision: parsed.source_decision,\n    source_persisted: parsed.source_persisted,\n    content_status: parsed.content_status,\n    content_storage_failed: Boolean(parsed.content_storage_failed),\n    evidence_rejected_count: parsed.evidence_rejected_count,\n    evidence_model_error: parsed.evidence_model_error,\n    has_evidence: true,\n    evidence_contract: evidence\n  },\n  pairedItem: { item: 0 }\n}));"
+      },
+      "id": "8e04dcaf-95bb-4e58-ba3e-a0c70ae99237",
+      "name": "Expand Evidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        10256,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4a2c8eef-9e4a-48a8-a1c8-460a13fa1921",
+              "leftValue": "={{ Boolean($json.has_evidence) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4f718675-1115-4f08-aff4-680448162b59",
+      "name": "Has Grounded Evidence?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        10496,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Validate and Prepare Run').item.json.config.supabase_url + '/rest/v1/rpc/n8n_record_research_evidence' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_evidence: $json.evidence_contract }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "085c5b71-9a19-4888-9a8c-d3ffb8126a23",
+      "name": "Persist Evidence via RPC",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        10736,
+        384
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const evidence = $('Expand Evidence').item.json;\nconst persisted = $input.item.json ?? {};\nreturn {\n  json: {\n    ...evidence,\n    evidence_id: persisted.evidence_id ?? evidence.evidence_contract?.id ?? null,\n    evidence_persisted: Boolean(persisted.evidence_id),\n    evidence_is_new: Boolean(persisted.is_new)\n  }\n};"
+      },
+      "id": "4bdce61d-acae-49f8-aabc-663ca974531e",
+      "name": "Restore Evidence Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        10976,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const incoming = $input.all().map((item) => item.json ?? {});\nconst original = $('Candidate Loop - One at a Time').item.json ?? {};\nconst downstream = incoming.find((item) => item.candidate_id === original.candidate_id) ?? incoming[0] ?? {};\nconst first = { ...original, ...downstream };\nconst persistedEvidence = incoming.filter((item) => item.evidence_persisted).length;\nconst invalidUrl = !first.canonical_url;\nconst reasonCodes = [...new Set(first.reason_codes ?? [])];\nconst providerErrors = first.discovery_provider_errors ?? first.provider_errors ?? [];\nconst noDiscoveryResults = first.candidate_id === 'no-results' || reasonCodes.includes('NO_SEARCH_RESULTS');\nconst errors = [];\nif (noDiscoveryResults) errors.push('NO_DISCOVERY_RESULTS');\nelse if (invalidUrl) errors.push('INVALID_OR_MISSING_CANONICAL_URL');\nif (first.evidence_model_error) errors.push(first.evidence_model_error);\nif (first.source_lookup_failed) errors.push('SOURCE_LOOKUP_FAILED');\nif (first.content_storage_failed) errors.push('CONTENT_STORAGE_FAILED');\n\nreturn [{\n  json: {\n    candidate_id: first.candidate_id ?? 'unknown',\n    canonical_url: first.canonical_url ?? null,\n    source_id: first.source_id ?? null,\n    source_decision: first.source_decision ?? (invalidUrl ? 'rejected' : 'unknown'),\n    source_persisted: Boolean(first.source_persisted),\n    content_status: first.content_status ?? null,\n    relevance_score: Number(first.relevance_score ?? 0),\n    evidence_persisted: persistedEvidence,\n    evidence_rejected: Number(first.evidence_rejected_count ?? 0),\n    discovery_provider: first.discovery_provider ?? 'unknown',\n    discovery_channel: first.discovery_channel ?? 'unknown',\n    discovery_providers: first.discovery_providers ?? [first.discovery_provider].filter(Boolean),\n    reason_codes: reasonCodes,\n    provider_errors: providerErrors,\n    errors\n  }\n}];"
+      },
+      "id": "0a9d6833-dfbd-4f84-b66a-eb38b943b6a0",
+      "name": "Candidate Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        11216,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $input.all().map((item) => item.json ?? {});\nconst seed = $('Validate and Prepare Run').first().json;\nconst plan = $('Parse Query Plan').first().json;\n\nconst metrics = {\n  queries_planned: plan.query_items.length,\n  planner_fallback_used: Boolean(plan.planner_fallback_used),\n  candidates_processed: results.length,\n  sources_persisted: results.filter((r) => r.source_persisted).length,\n  sources_duplicate: results.filter((r) => r.source_decision === 'duplicate').length,\n  sources_rejected: results.filter((r) => r.source_decision === 'rejected').length,\n  sources_needing_review: results.filter((r) => r.source_decision === 'needs_review').length,\n  crawl_success: results.filter((r) => r.content_status === 'success').length,\n  crawl_partial: results.filter((r) => r.content_status === 'partial').length,\n  crawl_failed: results.filter((r) => r.content_status === 'failed').length,\n  evidence_persisted: results.reduce((sum, r) => sum + Number(r.evidence_persisted || 0), 0),\n  evidence_rejected: results.reduce((sum, r) => sum + Number(r.evidence_rejected || 0), 0),\n  candidate_errors: results.reduce((sum, r) => sum + (Array.isArray(r.errors) ? r.errors.length : 0), 0),\n  automation_mode: seed.config.automation_mode,\n  engine_version: seed.config.engine_version,\n  discovery_by_provider: results.reduce((acc, row) => {\n    const key = row.discovery_provider ?? 'unknown';\n    acc[key] = (acc[key] ?? 0) + 1;\n    return acc;\n  }, {}),\n  discovery_by_channel: results.reduce((acc, row) => {\n    const key = row.discovery_channel ?? 'unknown';\n    acc[key] = (acc[key] ?? 0) + 1;\n    return acc;\n  }, {}),\n  discovery_provider_errors: [...new Map(results.flatMap((row) => row.provider_errors ?? []).map((error) => [String(error.provider) + ':' + String(error.code), error])).values()].slice(0, 30),\n  social_weak_signals: results.filter((row) => (row.reason_codes ?? []).includes('DISCOVERY_ONLY_SOCIAL_SOURCE')).length\n};\n\nlet finalStatus = 'completed';\nif (metrics.sources_persisted === 0) finalStatus = 'failed';\nelse if (metrics.candidate_errors > 0 || metrics.crawl_failed > 0 || plan.planner_fallback_used) finalStatus = 'partial';\n\nreturn [{\n  json: {\n    config: seed.config,\n    research_run_id: seed.research_run_id,\n    request_id: seed.request_id,\n    final_status: finalStatus,\n    metrics,\n    error_patch: {\n      planner_error: plan.planner_error_code ?? null,\n      candidate_errors: results.filter((r) => Array.isArray(r.errors) && r.errors.length).map((r) => ({ candidate_id: r.candidate_id, codes: r.errors })).slice(0, 20)\n    }\n  }\n}];"
+      },
+      "id": "5c1f19be-570c-412a-8b5a-acceb4173f9f",
+      "name": "Summarize Research Run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4864,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Validate and Prepare Run').item.json.config.supabase_url + '/rest/v1/rpc/n8n_set_research_run_status' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_research_run_id: $json.research_run_id, p_request_id: $json.request_id, p_status: $json.final_status, p_metrics_patch: $json.metrics, p_error_patch: $json.error_patch }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "e80f00ba-a4c0-4940-ba51-a7e7efd611c3",
+      "name": "Finalize Research Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5104,
+        352
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const summary = $('Summarize Research Run').first().json;\nconst finalized = $input.first().json ?? {};\nreturn [{\n  json: {\n    ok: summary.final_status === 'completed' || summary.final_status === 'partial',\n    research_run_id: summary.research_run_id,\n    request_id: summary.request_id,\n    status: finalized.status ?? summary.final_status,\n    metrics: summary.metrics,\n    review_required: true,\n    next_action: 'Review source and evidence records in Supabase before any downstream signal generation.'\n  }\n}];"
+      },
+      "id": "37829518-f4d0-4d49-8a67-609873e13533",
+      "name": "Final Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5344,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "query": "={{ $json.query }}",
+        "options": {
+          "search_depth": "basic",
+          "max_results": "={{ $json.result_limit }}"
+        }
+      },
+      "type": "@tavily/n8n-nodes-tavily.tavily",
+      "typeVersion": 1,
+      "position": [
+        3264,
+        400
+      ],
+      "id": "f8bf2912-68be-48ac-a48c-a05b1b468ef1",
+      "name": "Tavily Search",
+      "retryOnFail": true,
+      "credentials": {
+        "tavilyApi": {
+          "id": "2zOgpdnN8HyOetb2",
+          "name": "Tavily account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "scrape",
+        "url": "={{ $json.canonical_url }}",
+        "requestOptions": {}
+      },
+      "type": "@mendable/n8n-nodes-firecrawl.firecrawl",
+      "typeVersion": 1,
+      "position": [
+        6176,
+        704
+      ],
+      "id": "55388bf9-1edf-488c-a296-ece5ed02d31d",
+      "name": "/scrape",
+      "credentials": {
+        "firecrawlApi": {
+          "id": "yIMOx1xvRIQDmKGL",
+          "name": "Firecrawl account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "6a39c7b7-cb6e-43af-a342-fdab050412ea",
+      "name": "Scheduled Run Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        352,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Input is supplied only by RE 01 Shared Domain Scheduler.\n// The scheduler has already created the queued research_runs row.\n\nconst input = $input.first().json;\nconst profile = input.domain_default_config ?? {};\nconst schedule = input.schedule_config ?? {};\nconst now = new Date();\nconst from = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);\n\nconst topics = Array.isArray(profile.topics) ? profile.topics : [];\nconst queryFocus = Array.isArray(profile.query_focus) ? profile.query_focus : [];\nconst geographies = Array.isArray(profile.geographies) ? profile.geographies : ['global'];\n\nreturn [{\n  json: {\n    existing_research_run: true,\n    research_run_id: input.research_run_id,\n    request_id: input.request_id,\n    schedule_metadata: {\n      domain_id: input.domain_id,\n      slot_start: input.slot_start,\n      subscriber_count: input.subscriber_count,\n      profile_version: profile.profile_version ?? '1.0.0',\n      domain_config_version: input.domain_config_version ?? 1\n    },\n    config: {\n      supabase_url: input.supabase_url,\n      workspace_id: input.workspace_id ?? input.collector_workspace_id,\n      workspace_domain_id: input.workspace_domain_id ?? input.collector_workspace_domain_id,\n      domain_key: input.domain_key,\n      topic: [input.domain_name, input.domain_description, ...topics].filter(Boolean).join('; '),\n      objective: queryFocus.length\n        ? 'Find current, primary-source developments for: ' + queryFocus.join('; ') + '. Emphasize capital flows, adoption, measurable outcomes, and material risks.'\n        : 'Find current, source-grounded developments, capital flows, adoption signals, and material risks for this domain.',\n      geographies,\n      entities: [],\n      preferred_domains: Array.isArray(schedule.preferred_domains) ? schedule.preferred_domains : [],\n      blocked_domains: Array.isArray(schedule.blocked_domains)\n        ? schedule.blocked_domains\n        : ['pinterest.com', 'quora.com', 'medium.com'],\n      date_from: from.toISOString(),\n      date_to: now.toISOString(),\n      automation_mode: 'automatic',\n      query_model: schedule.query_model ?? 'gpt-6-luna',\n      evidence_model: schedule.evidence_model ?? 'gpt-6-luna',\n      prompt_version: 'research-evidence-v1.1.0',\n      query_prompt_version: 'research-query-plan-v1.0.0',\n      contract_version: '1.0.0',\n      engine_version: 'research-engine-v2.1.0',\n      limits: {\n        max_queries: schedule.max_queries ?? 4,\n        results_per_query: schedule.results_per_query ?? 8,\n        max_candidates: schedule.max_candidates ?? 18,\n        max_source_chars: schedule.max_source_chars ?? 24000,\n        min_content_chars: schedule.min_content_chars ?? 700,\n        max_evidence_per_source: schedule.max_evidence_per_source ?? 5,\n        max_openai_output_tokens: schedule.max_openai_output_tokens ?? 1600,\n        max_estimated_openai_cost_usd: schedule.max_estimated_openai_cost_usd ?? 0.10,\n        max_tavily_queries: schedule.max_tavily_queries ?? 4,\n        max_firecrawl_candidates: schedule.max_firecrawl_candidates ?? 6,\n        hn_results: schedule.hn_results ?? 10,\n        hn_queries: schedule.hn_queries ?? 5,\n        arxiv_results: schedule.arxiv_results ?? 8,\n        gdelt_results: schedule.gdelt_results ?? 30,\n        gdelt_queries: 1\n      },\n      thresholds: {\n        min_relevance: schedule.min_relevance ?? 0.38,\n        min_source_quality: schedule.min_source_quality ?? 0.40,\n        min_evidence_confidence: schedule.min_evidence_confidence ?? 0.55\n      },\n      monitored_feeds: Array.isArray(profile.monitored_feeds) ? profile.monitored_feeds : [],\n      ecosystem_domains: Array.isArray(profile.ecosystem_domains) ? profile.ecosystem_domains : [\n        'ycombinator.com', 'a16z.com', 'sequoiacap.com', 'accel.com',\n        'lightspeedvp.com', 'indexventures.com', 'generalcatalyst.com',\n        'bvp.com', 'reddit.com', 'x.com'\n      ],\n      pricing_per_million_tokens: {\n        input: 0.10,\n        output: 0.50\n      }\n    }\n  },\n  pairedItem: { item: 0 }\n}];"
+      },
+      "id": "a387e203-0e03-49fc-a433-ebe6683a968c",
+      "name": "Prepare Scheduled Research Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0e5845fb-54ed-4477-aee8-cb09725a4d17",
+              "leftValue": "={{ $json.run_already_created === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f57b5429-8ecc-4660-a5af-b4f4dcd1c5eb",
+      "name": "Run Already Queued?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1040,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "5e99fbfc-6a6f-45d7-aa2f-6a71f7686562",
+      "name": "Discovery Job Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2800,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b5e948fe-18cb-4d49-ace7-176c239cca7f",
+              "leftValue": "={{ $json.adapter === 'tavily' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8e436f35-3a90-4750-a7dc-70d3ff4e948d",
+      "name": "Is Tavily Discovery?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3024,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8f3162e1-64f4-4d4d-a3a1-aabe0fd1b2b3",
+              "leftValue": "={{ $json.adapter === 'hacker_news' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b1111477-afed-4c71-a92a-00ac6aac2c70",
+      "name": "Is Hacker News Discovery?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3248,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "de63992b-b98e-4d43-a678-c80ee04abf1b",
+              "leftValue": "={{ $json.adapter === 'arxiv' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "75a9c4f1-2ca9-4922-a033-208ebf99abc9",
+      "name": "Is arXiv Discovery?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3472,
+        944
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "644fc216-73a2-44a8-abae-adce3386461c",
+              "leftValue": "={{ $json.adapter === 'gdelt' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "19063e16-eb6f-49a5-aceb-d80e4520bbd8",
+      "name": "Is GDELT Discovery?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3696,
+        1104
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const job = $('Discovery Job Loop').item.json;\nconst response = $input.first().json ?? {};\nconst payload = response?.data && Array.isArray(response.data.results) ? response.data : response;\nconst results = Array.isArray(payload.results) ? payload.results : [];\n\nconst candidates = results.map((result, index) => ({\n  original_url: result.url,\n  title: result.title,\n  snippet: result.content ?? result.snippet ?? result.raw_content ?? '',\n  provider_score: Number(result.score ?? 0),\n  published_at: result.published_date ?? null,\n  author: null,\n  source_type: 'article',\n  embedded_content: null,\n  discovery_provider: 'tavily',\n  discovery_channel: job.channel,\n  source_tier: job.source_tier,\n  query: job.query,\n  query_intent: job.intent,\n  result_rank: index + 1,\n  provider_request_id: (payload.request_id ?? 'tavily') + ':' + index,\n  reason_codes: []\n}));\n\nreturn [{\n  json: {\n    job,\n    provider: 'tavily',\n    candidates,\n    provider_error: results.length ? null : (response.error ? 'TAVILY_REQUEST_FAILED' : 'NO_TAVILY_RESULTS')\n  },\n  pairedItem: { item: 0 }\n}];"
+      },
+      "id": "d2fc9e2c-e321-4240-abc0-fdc0bd2b980d",
+      "name": "Normalize Tavily Discovery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3504,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://hn.algolia.com/api/v1/search_by_date",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.query }}"
+            },
+            {
+              "name": "tags",
+              "value": "story"
+            },
+            {
+              "name": "numericFilters",
+              "value": "={{ \"created_at_i>\" + $json.date_from_unix }}"
+            },
+            {
+              "name": "hitsPerPage",
+              "value": "={{ $json.result_limit }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "6f7e79ce-90e8-4eda-a9de-91f7c565d933",
+      "name": "Hacker News Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3472,
+        688
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const job = $('Discovery Job Loop').item.json;\nconst response = $input.first().json ?? {};\nconst hits = Array.isArray(response.hits) ? response.hits : [];\n\nconst candidates = hits.map((hit, index) => {\n  const itemUrl = 'https://news.ycombinator.com/item?id=' + hit.objectID;\n  const linkedUrl = hit.url || itemUrl;\n  const points = Math.max(0, Number(hit.points ?? 0));\n  const comments = Math.max(0, Number(hit.num_comments ?? 0));\n  return {\n    original_url: linkedUrl,\n    title: hit.title ?? hit.story_title ?? 'Hacker News discussion',\n    snippet: hit.story_text ?? hit.comment_text ?? '',\n    provider_score: Math.min(1, (Math.log10(points + 1) + Math.log10(comments + 1)) / 5),\n    published_at: hit.created_at ?? null,\n    author: hit.author ?? null,\n    source_type: linkedUrl === itemUrl ? 'post' : 'article',\n    embedded_content: null,\n    discovery_provider: 'hacker_news_algolia',\n    discovery_channel: 'hacker_news',\n    source_tier: 'structured_community',\n    query: job.query,\n    query_intent: job.intent,\n    result_rank: index + 1,\n    provider_request_id: hit.objectID ?? null,\n    reason_codes: ['COMMUNITY_SIGNAL'],\n    discussion_url: itemUrl\n  };\n});\n\nreturn [{\n  json: {\n    job,\n    provider: 'hacker_news_algolia',\n    candidates,\n    provider_error: hits.length ? null : (response.error ? 'HACKER_NEWS_REQUEST_FAILED' : 'NO_HACKER_NEWS_RESULTS')\n  },\n  pairedItem: { item: 0 }\n}];"
+      },
+      "id": "62cf3a7c-76d5-40d4-ae29-08239dd9ee3f",
+      "name": "Normalize Hacker News Discovery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3712,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openalex.org/works",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "AI-Intelligence-Research/2.0"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "search",
+              "value": "={{ $json.query }}"
+            },
+            {
+              "name": "filter",
+              "value": "={{ \"from_publication_date:\" + $json.from_publication_date + \",to_publication_date:\" + $json.to_publication_date }}"
+            },
+            {
+              "name": "per_page",
+              "value": "={{ $json.result_limit }}"
+            },
+            {
+              "name": "sort",
+              "value": "publication_date:desc"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "1983efd3-65b7-4c9a-a0b5-8c9806c1136c",
+      "name": "arXiv Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3712,
+        912
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1500,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const job = $('Discovery Job Loop').item.json;\nconst response = $input.first().json ?? {};\nconst works = Array.isArray(response.results) ? response.results : [];\nconst abstractText = (index) => {\n  if (!index || typeof index !== 'object') return '';\n  const words = [];\n  for (const [word, positions] of Object.entries(index)) {\n    for (const position of (positions ?? [])) words[position] = word;\n  }\n  return words.filter(Boolean).join(' ');\n};\n\nconst candidates = works.map((work, index) => {\n  const title = work.display_name ?? work.title ?? 'Research paper';\n  const summary = abstractText(work.abstract_inverted_index);\n  const authors = (work.authorships ?? []).map((item) => item.author?.display_name).filter(Boolean);\n  const url = work.doi || work.primary_location?.landing_page_url || work.id;\n  return {\n    original_url: url,\n    title,\n    snippet: summary.slice(0, 3000),\n    provider_score: 0.82,\n    published_at: work.publication_date || null,\n    author: authors.join(', ') || null,\n    source_type: 'paper',\n    embedded_content: [title, 'Authors: ' + authors.join(', '), 'Abstract:', summary].filter(Boolean).join('\\n\\n'),\n    discovery_provider: 'openalex',\n    discovery_channel: 'arxiv',\n    source_tier: 'research',\n    query: job.query,\n    query_intent: job.intent,\n    result_rank: index + 1,\n    provider_request_id: work.id || url || null,\n    reason_codes: ['STRUCTURED_RESEARCH_SOURCE']\n  };\n});\n\nreturn [{\n  json: {\n    job,\n    provider: 'openalex',\n    candidates,\n    provider_error: candidates.length ? null : (response.error ? 'OPENALEX_REQUEST_FAILED' : 'NO_OPENALEX_RESULTS')\n  },\n  pairedItem: { item: 0 }\n}];"
+      },
+      "id": "70267669-0456-4f8d-a146-188893e12cdb",
+      "name": "Normalize arXiv Discovery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3952,
+        912
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.gdeltproject.org/api/v2/doc/doc",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.query }}"
+            },
+            {
+              "name": "mode",
+              "value": "artlist"
+            },
+            {
+              "name": "format",
+              "value": "json"
+            },
+            {
+              "name": "sort",
+              "value": "datedesc"
+            },
+            {
+              "name": "maxrecords",
+              "value": "={{ $json.result_limit }}"
+            },
+            {
+              "name": "startdatetime",
+              "value": "={{ $json.start_datetime }}"
+            },
+            {
+              "name": "enddatetime",
+              "value": "={{ $json.end_datetime }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "2bd7ca52-c89e-403d-ad71-d87f2a584e40",
+      "name": "GDELT News Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3936,
+        1104
+      ],
+      "retryOnFail": false,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const job = $('Discovery Job Loop').item.json;\nconst response = $input.first().json ?? {};\nconst articles = Array.isArray(response.articles)\n  ? response.articles\n  : (Array.isArray(response.data?.articles) ? response.data.articles : []);\n\nconst candidates = articles.map((article, index) => ({\n  original_url: article.url,\n  title: article.title ?? article.domain ?? 'GDELT article',\n  snippet: article.description ?? '',\n  provider_score: Math.max(0.45, 1 - (index / Math.max(articles.length, 1)) * 0.35),\n  published_at: article.seendate ?? null,\n  author: null,\n  source_type: 'article',\n  embedded_content: null,\n  discovery_provider: 'gdelt_doc',\n  discovery_channel: 'global_news',\n  source_tier: 'news_aggregator',\n  query: job.query,\n  query_intent: job.intent,\n  result_rank: index + 1,\n  provider_request_id: 'gdelt:' + (article.url ?? index),\n  reason_codes: ['GLOBAL_NEWS_DISCOVERY'],\n  source_country: article.sourcecountry ?? null,\n  language: article.language ?? null\n}));\n\nreturn [{\n  json: {\n    job,\n    provider: 'gdelt_doc',\n    candidates,\n    provider_error: candidates.length ? null : (response.error ? 'GDELT_REQUEST_FAILED' : 'NO_GDELT_RESULTS')\n  },\n  pairedItem: { item: 0 }\n}];"
+      },
+      "id": "273d1add-410e-4891-acf1-68021b3d4992",
+      "name": "Normalize GDELT Discovery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4176,
+        1104
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.feed_url }}",
+        "options": {}
+      },
+      "id": "a2c53e0a-8fd7-44a4-a0ca-03ed8a24a9bd",
+      "name": "Read Monitored RSS Feed",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        3712,
+        1168
+      ],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const job = $('Discovery Job Loop').item.json;\nconst entries = $input.all().map((item) => item.json ?? {}).filter((entry) => entry.link || entry.guid);\nconst candidates = entries.slice(0, job.result_limit).map((entry, index) => ({\n  original_url: entry.link ?? entry.guid,\n  title: entry.title ?? job.feed_name,\n  snippet: entry.contentSnippet ?? entry.content ?? entry.description ?? '',\n  provider_score: 0.86,\n  published_at: entry.isoDate ?? entry.pubDate ?? null,\n  author: entry.creator ?? entry.author ?? null,\n  source_type: 'article',\n  embedded_content: String(entry.content ?? '').replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim() || null,\n  discovery_provider: 'rss',\n  discovery_channel: 'monitored_feed',\n  source_tier: job.source_tier,\n  query: job.query,\n  query_intent: job.intent,\n  result_rank: index + 1,\n  provider_request_id: entry.guid ?? entry.link ?? null,\n  reason_codes: ['MONITORED_FEED']\n}));\n\nreturn [{\n  json: {\n    job,\n    provider: 'rss',\n    candidates,\n    provider_error: candidates.length ? null : ($input.first().json?.error ? 'RSS_REQUEST_FAILED' : 'NO_RSS_RESULTS')\n  },\n  pairedItem: { item: 0 }\n}];"
+      },
+      "id": "9bbcc890-5d5d-422a-a183-408ac7fefc1a",
+      "name": "Normalize RSS Discovery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3952,
+        1168
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.first().json ?? {};\nreturn [{ json: result, pairedItem: { item: 0 } }];"
+      },
+      "id": "f94bb720-2e47-4b6f-a752-c36a57e3c1b9",
+      "name": "Discovery Job Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4192,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fcfac3ac-04d3-4a20-ae72-5dc1fb436e92",
+              "leftValue": "={{ typeof $json.embedded_content === 'string' && $json.embedded_content.length >= 300 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9b2d4da3-a99f-4a75-aa42-ca3a31072297",
+      "name": "Has Embedded Content?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5792,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const candidate = $input.first().json;\nconst maxChars = candidate.config.limits.max_source_chars;\nlet content = String(candidate.embedded_content ?? '').replace(/\\s+/g, ' ').trim();\nconst wasTruncated = content.length > maxChars;\nif (wasTruncated) content = content.slice(0, maxChars);\nconst tooShort = content.length < Math.min(700, candidate.config.limits.min_content_chars);\n\nreturn [{\n  json: {\n    ...candidate,\n    content_text: content || null,\n    content_status: !content ? 'failed' : (tooShort ? 'partial' : 'success'),\n    extraction_method: candidate.discovery_provider + '-embedded-content',\n    extracted_at: new Date().toISOString(),\n    reason_codes: [...new Set([\n      ...(candidate.reason_codes ?? []),\n      ...(tooShort ? ['CONTENT_TOO_SHORT'] : []),\n      ...(wasTruncated ? ['CONTENT_TRUNCATED'] : [])\n    ])]\n  },\n  pairedItem: { item: 0 }\n}];"
+      },
+      "id": "09275c48-004b-43e7-a1ff-29bfc1cef704",
+      "name": "Normalize Embedded Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6032,
+        576
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Research Request and Limits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Research Request and Limits": {
+      "main": [
+        [
+          {
+            "node": "Validate and Prepare Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate and Prepare Run": {
+      "main": [
+        [
+          {
+            "node": "Run Already Queued?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Research Run": {
+      "main": [
+        [
+          {
+            "node": "Claim Research Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Research Run": {
+      "main": [
+        [
+          {
+            "node": "Build Query Planner Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Query Planner Request": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Query Planner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Query Planner": {
+      "main": [
+        [
+          {
+            "node": "Parse Query Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Query Plan": {
+      "main": [
+        [
+          {
+            "node": "Record Planner Usage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Planner Usage": {
+      "main": [
+        [
+          {
+            "node": "Build Discovery Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize and Dedupe Candidates": {
+      "main": [
+        [
+          {
+            "node": "Candidate Loop - One at a Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Candidate Loop - One at a Time": {
+      "main": [
+        [
+          {
+            "node": "Summarize Research Run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Valid Canonical URL?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Valid Canonical URL?": {
+      "main": [
+        [
+          {
+            "node": "Meets Relevance Gate?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Candidate Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Meets Relevance Gate?": {
+      "main": [
+        [
+          {
+            "node": "Lookup Existing Source",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Source Persistence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Existing Source": {
+      "main": [
+        [
+          {
+            "node": "Resolve Existing Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Existing Source": {
+      "main": [
+        [
+          {
+            "node": "Already Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already Exists?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Source Persistence",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Embedded Content?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Extracted Content": {
+      "main": [
+        [
+          {
+            "node": "Prepare Source Persistence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Source Persistence": {
+      "main": [
+        [
+          {
+            "node": "Persist Source via RPC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Source via RPC": {
+      "main": [
+        [
+          {
+            "node": "Restore Persisted Source Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Persisted Source Context": {
+      "main": [
+        [
+          {
+            "node": "Should Store Source Content?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Store Source Content?": {
+      "main": [
+        [
+          {
+            "node": "Upload Source Content",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Eligible for Evidence?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Source Content": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Content Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Content Upload": {
+      "main": [
+        [
+          {
+            "node": "Content Stored?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Content Stored?": {
+      "main": [
+        [
+          {
+            "node": "Update Source Storage Path",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Eligible for Evidence?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Source Storage Path": {
+      "main": [
+        [
+          {
+            "node": "Restore Stored Source Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Stored Source Context": {
+      "main": [
+        [
+          {
+            "node": "Eligible for Evidence?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eligible for Evidence?": {
+      "main": [
+        [
+          {
+            "node": "Build Evidence Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Candidate Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Evidence Request": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Evidence Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Evidence Extraction": {
+      "main": [
+        [
+          {
+            "node": "Parse and Verify Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse and Verify Evidence": {
+      "main": [
+        [
+          {
+            "node": "Record Evidence LLM Usage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Evidence LLM Usage": {
+      "main": [
+        [
+          {
+            "node": "Expand Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand Evidence": {
+      "main": [
+        [
+          {
+            "node": "Has Grounded Evidence?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Grounded Evidence?": {
+      "main": [
+        [
+          {
+            "node": "Persist Evidence via RPC",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Candidate Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Evidence via RPC": {
+      "main": [
+        [
+          {
+            "node": "Restore Evidence Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Evidence Context": {
+      "main": [
+        [
+          {
+            "node": "Candidate Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Candidate Complete": {
+      "main": [
+        [
+          {
+            "node": "Candidate Loop - One at a Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize Research Run": {
+      "main": [
+        [
+          {
+            "node": "Finalize Research Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Research Run": {
+      "main": [
+        [
+          {
+            "node": "Final Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tavily Search": {
+      "main": [
+        [
+          {
+            "node": "Normalize Tavily Discovery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "/scrape": {
+      "main": [
+        [
+          {
+            "node": "Normalize Extracted Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scheduled Run Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Scheduled Research Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Scheduled Research Request": {
+      "main": [
+        [
+          {
+            "node": "Validate and Prepare Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Already Queued?": {
+      "main": [
+        [
+          {
+            "node": "Claim Research Run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Research Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Discovery Jobs": {
+      "main": [
+        [
+          {
+            "node": "Discovery Job Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Discovery Job Loop": {
+      "main": [
+        [
+          {
+            "node": "Normalize and Dedupe Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Tavily Discovery?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Tavily Discovery?": {
+      "main": [
+        [
+          {
+            "node": "Tavily Search",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Hacker News Discovery?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Tavily Discovery": {
+      "main": [
+        [
+          {
+            "node": "Discovery Job Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Hacker News Discovery?": {
+      "main": [
+        [
+          {
+            "node": "Hacker News Search",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is arXiv Discovery?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hacker News Search": {
+      "main": [
+        [
+          {
+            "node": "Normalize Hacker News Discovery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Hacker News Discovery": {
+      "main": [
+        [
+          {
+            "node": "Discovery Job Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is arXiv Discovery?": {
+      "main": [
+        [
+          {
+            "node": "arXiv Search",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is GDELT Discovery?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "arXiv Search": {
+      "main": [
+        [
+          {
+            "node": "Normalize arXiv Discovery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize arXiv Discovery": {
+      "main": [
+        [
+          {
+            "node": "Discovery Job Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is GDELT Discovery?": {
+      "main": [
+        [
+          {
+            "node": "GDELT News Search",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Read Monitored RSS Feed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GDELT News Search": {
+      "main": [
+        [
+          {
+            "node": "Normalize GDELT Discovery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize GDELT Discovery": {
+      "main": [
+        [
+          {
+            "node": "Discovery Job Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Monitored RSS Feed": {
+      "main": [
+        [
+          {
+            "node": "Normalize RSS Discovery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize RSS Discovery": {
+      "main": [
+        [
+          {
+            "node": "Discovery Job Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Discovery Job Complete": {
+      "main": [
+        [
+          {
+            "node": "Discovery Job Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Embedded Content?": {
+      "main": [
+        [
+          {
+            "node": "Normalize Embedded Content",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "/scrape",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Embedded Content": {
+      "main": [
+        [
+          {
+            "node": "Prepare Source Persistence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionTimeout": 3600
+  },
+  "versionId": "d84d49be-36af-4523-a189-8079914e71b4",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "0b0cbe1b194115a42ad8ae22724abf34f516e7da8a529780997b500125b4501f"
+  },
+  "nodeGroups": [],
+  "tags": [
+    {
+      "name": "research-engine",
+      "id": "lvUfI0PJeTXYJ4YA",
+      "updatedAt": "2026-09-27T02:00:56.385Z",
+      "createdAt": "2026-09-27T02:00:56.385Z"
+    },
+    {
+      "name": "review-only",
+      "id": "rOXwklkwFCs7UABT",
+      "updatedAt": "2026-09-27T02:00:56.443Z",
+      "createdAt": "2026-09-27T02:00:56.443Z"
+    },
+    {
+      "name": "manual-only",
+      "id": "sicpfUKUB5wbfFUD",
+      "updatedAt": "2026-09-27T02:00:56.412Z",
+      "createdAt": "2026-09-27T02:00:56.412Z"
+    },
+    {
+      "name": "development",
+      "id": "zRwUjW2CqOB2Xraj",
+      "updatedAt": "2026-09-27T02:00:56.480Z",
+      "createdAt": "2026-09-27T02:00:56.480Z"
+    }
+  ]
+}

@@ -1,0 +1,671 @@
+{
+  "name": "RE 08 - Accepted Signal Observation Engine",
+  "nodes": [
+    {
+      "id": "a1c21fe8-0000-4000-8000-d27b0b9956aa",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        240
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "7c37b095-0000-4000-8000-c122cf35dfd5",
+      "name": "Daily Observation Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "08d8891d-0000-4000-8000-cca05af12058",
+      "name": "Observation Engine Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: {\n  supabase_url: 'https://jaeltkzfjgrzgxgzxlfs.supabase.co',\n  workspace_id: 'a51b8277-4cd5-4f8a-9ffd-4ddbe56683da',\n  domain_limit: 3,\n  signals_per_domain: 12,\n  max_observations_per_domain: 4,\n  model: 'gpt-6-luna',\n  engine_version: 'observation-engine-v1.1.0'\n} }];"
+      }
+    },
+    {
+      "id": "1132ff50-0000-4000-8000-51cf0f07b512",
+      "name": "Load Accepted Signals",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        320
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.supabase_url + '/rest/v1/rpc/n8n_list_observation_signal_candidates' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_workspace_id: $json.workspace_id, p_domain_limit: $json.domain_limit, p_signals_per_domain: $json.signals_per_domain }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "de11cdc5-0000-4000-8000-295c8ae4463a",
+      "name": "Build Diverse Signal Packs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const config = $('Observation Engine Configuration').first().json;\nconst rows = $input.all().flatMap((item) => Array.isArray(item.json) ? item.json : [item.json])\n  .filter((row) => row && row.signal_id && row.workspace_domain_id);\nif (!rows.length) return [{ json: { config, no_signals: true, signal_items: [], source_count: 0 } }];\nconst groups = new Map();\nfor (const row of rows) {\n  const key = row.workspace_domain_id;\n  if (!groups.has(key)) groups.set(key, { config, no_signals: false, workspace_id: row.workspace_id,\n    workspace_domain_id: key, domain_key: row.domain_key, domain_name: row.domain_name, signal_items: [] });\n  groups.get(key).signal_items.push({ signal_id: row.signal_id, signal_type: row.signal_type,\n    title: row.title, summary: row.summary, event_at: row.event_at, confidence: row.confidence,\n    novelty_score: row.novelty_score, importance_score: row.importance_score,\n    geographies: row.geographies ?? [], topics: row.topics ?? [], evidence_count: Number(row.evidence_count ?? 0),\n    independent_source_count: Number(row.independent_source_count ?? 0),\n    source_ids: Array.isArray(row.source_ids) ? row.source_ids : [] });\n}\nreturn [...groups.values()].map((pack) => ({ json: { ...pack,\n  source_count: new Set(pack.signal_items.flatMap((item) => item.source_ids)).size } }));"
+      }
+    },
+    {
+      "id": "743b8bc3-0000-4000-8000-84fe786140b0",
+      "name": "Observation Domain Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        960,
+        320
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "e78052f5-0000-4000-8000-0fe5f338ad44",
+      "name": "Has Diverse Accepted Signals?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        440
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "40961d0c-0000-4000-8000-6ab7b90374e8",
+              "leftValue": "={{ $json.no_signals !== true && $json.signal_items.length >= 2 && $json.source_count >= 2 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "535f5766-0000-4000-8000-488f1ef49411",
+      "name": "Build Observation Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        340
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pack = $input.first().json;\nconst signalReference = { type: 'object', additionalProperties: false, properties: {\n  signal_id: { type: 'string' }, role: { type: 'string', enum: ['supporting','contradicting','context'] },\n  weight: { type: 'number' }\n}, required: ['signal_id','role','weight'] };\nconst observation = { type: 'object', additionalProperties: false, properties: {\n  observation_type: { type: 'string', enum: ['capital_flow','market_activity','technology_adoption','research_development','regulatory_shift','competitive_movement','operational_change','other'] },\n  title: { type: 'string' }, statement: { type: 'string' },\n  time_window_start: { type: 'string' }, time_window_end: { type: 'string' }, confidence: { type: 'number' },\n  signals: { type: 'array', minItems: 2, maxItems: 8, items: signalReference }\n}, required: ['observation_type','title','statement','time_window_start','time_window_end','confidence','signals'] };\nconst schema = { type: 'object', additionalProperties: false, properties: {\n  observations: { type: 'array', maxItems: pack.config.max_observations_per_domain, items: observation }\n}, required: ['observations'] };\nconst signalPack = { domain_key: pack.domain_key, domain_name: pack.domain_name,\n  independent_source_count: pack.source_count, accepted_signals: pack.signal_items };\nreturn [{ json: { ...pack, openai_request: { model: pack.config.model, store: false, max_output_tokens: 1800,\n  instructions: 'Create only bounded descriptive observations using the accepted signals supplied. Every observation must cite at least two supplied signal_id values backed by at least two independent source IDs. Combine signals only when they describe a coherent shared development or condition. Do not force unrelated signals together. Do not claim a trend, recurring pattern, causal relationship, prediction, thesis, recommendation, or final insight. Do not add facts, entities, dates, amounts, or conclusions absent from the cited signals. Use empty time-window strings when the signals do not establish the boundary. Return an empty observations array when no defensible multi-signal observation exists. Valid outputs are automatically policy-accepted; signal review is the only human gate.',\n  input: [{ role: 'user', content: [{ type: 'input_text', text: JSON.stringify(signalPack) }] }],\n  text: { format: { type: 'json_schema', name: 'accepted_signal_observations', strict: true, schema } }\n} } }];"
+      }
+    },
+    {
+      "id": "0b0a8093-0000-4000-8000-030b29780d66",
+      "name": "OpenAI Observation Synthesis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        340
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.openai_request) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "7a0hdZ68ejgk6EnD",
+          "name": "OpenAI account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "89a0392e-0000-4000-8000-58d06a65c124",
+      "name": "Validate Observation Candidates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        340
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pack = $('Build Observation Request').item.json;\nconst response = $input.first().json ?? {};\nconst outputText = (response.output ?? []).flatMap((item) => item.content ?? []).find((item) => item.type === 'output_text')?.text;\nlet parsed = null;\ntry { if (outputText) parsed = JSON.parse(outputText); } catch {}\nconst allowedTypes = new Set(['capital_flow','market_activity','technology_adoption','research_development','regulatory_shift','competitive_movement','operational_change','other']);\nconst signalById = new Map(pack.signal_items.map((item) => [item.signal_id, item]));\nconst normalizeText = (value, max) => {\n  const raw = String(value ?? '');\n  let output = '';\n  let pendingSpace = false;\n  for (const character of raw) {\n    if (character.trim() === '') { pendingSpace = output.length > 0; continue; }\n    if (pendingSpace) output += ' ';\n    output += character;\n    pendingSpace = false;\n    if (output.length >= max) break;\n  }\n  return output.trim().slice(0, max);\n};\nconst forbiddenWords = new Set(['trend','trends','pattern','patterns','hypothesis','predict','predicts','forecast','forecasts','causal','causes','caused','drives','driven']);\nconst seen = new Set();\nconst valid = [];\nlet rejected = 0;\nfor (const candidate of (Array.isArray(parsed?.observations) ? parsed.observations : [])) {\n  const title = normalizeText(candidate.title, 240);\n  const statement = normalizeText(candidate.statement, 2000);\n  const refs = (Array.isArray(candidate.signals) ? candidate.signals : []).filter((ref) => signalById.has(ref.signal_id));\n  const uniqueRefs = [...new Map(refs.map((ref) => [ref.signal_id, ref])).values()].slice(0, 8);\n  const sourceIds = new Set(uniqueRefs.flatMap((ref) => signalById.get(ref.signal_id).source_ids ?? []));\n  const start = String(candidate.time_window_start ?? '').trim();\n  const end = String(candidate.time_window_end ?? '').trim();\n  const datesValid = (!start || !Number.isNaN(Date.parse(start))) && (!end || !Number.isNaN(Date.parse(end)))\n    && (!start || !end || Date.parse(end) >= Date.parse(start));\n  const words = new Set((title + ' ' + statement).toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter(Boolean));\n  const forbiddenClaim = [...forbiddenWords].some((word) => words.has(word));\n  const key = String(candidate.observation_type) + ':' + title.toLowerCase();\n  if (!allowedTypes.has(candidate.observation_type) || title.length < 8 || statement.length < 30\n    || uniqueRefs.length < 2 || sourceIds.size < 2 || !datesValid || forbiddenClaim || seen.has(key)) { rejected++; continue; }\n  seen.add(key);\n  valid.push({ p_observation: { workspace_id: pack.workspace_id, workspace_domain_id: pack.workspace_domain_id,\n    observation_type: candidate.observation_type, title, statement,\n    time_window_start: start, time_window_end: end,\n    confidence: Math.max(0, Math.min(1, Number(candidate.confidence ?? 0))),\n    signals: uniqueRefs.map((ref) => ({ signal_id: ref.signal_id,\n      role: ['supporting','contradicting','context'].includes(ref.role) ? ref.role : 'supporting',\n      weight: Math.max(0, Math.min(1, Number(ref.weight ?? 0.7))) })),\n    engine_version: pack.config.engine_version, metadata: { generation_mode: 'accepted_signals_only',\n      input_signal_count: uniqueRefs.length, input_source_count: sourceIds.size, domain_key: pack.domain_key }\n  }, candidate_quality: { input_signal_count: uniqueRefs.length, input_source_count: sourceIds.size } });\n}\nif (!valid.length) return [{ json: { no_observation: true, workspace_domain_id: pack.workspace_domain_id,\n  domain_key: pack.domain_key, provider_error: response.error ? 'OPENAI_OBSERVATION_REQUEST_FAILED' : null,\n  candidates_rejected: rejected, openai_calls: 1 } }];\nreturn valid.map((item) => ({ json: { ...item, no_observation: false,\n  candidates_rejected: rejected, openai_calls: 1 } }));"
+      }
+    },
+    {
+      "id": "62add00e-0000-4000-8000-f4bb5806d604",
+      "name": "Observation Candidate Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2160,
+        340
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "f4786e5c-0000-4000-8000-57b5e1630a24",
+      "name": "Has Valid Observation?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2400,
+        460
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4b1b788b-0000-4000-8000-0c3d4318cbdb",
+              "leftValue": "={{ $json.no_observation !== true && Boolean($json.p_observation) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "fb2b1e4e-0000-4000-8000-52965e39c720",
+      "name": "Persist Validated Observation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        380
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Observation Engine Configuration').item.json.supabase_url + '/rest/v1/rpc/n8n_upsert_verified_observation' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_observation: $json.p_observation }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "1fde1878-0000-4000-8000-f5e2a966e1d9",
+      "name": "Auto-Accept Observation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2880,
+        380
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Observation Engine Configuration').item.json.supabase_url + '/rest/v1/rpc/n8n_accept_verified_observation' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_observation_id: ($json.observation_id ?? $json[0]?.observation_id), p_is_new: Boolean($json.is_new ?? $json[0]?.is_new) }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "56f14384-0000-4000-8000-b19632ddadef",
+      "name": "Observation Candidate Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        380
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const response = $input.first().json ?? {};\nconst result = Array.isArray(response) ? (response[0] ?? {}) : response;\nreturn [{ json: { completed: true, observation_id: result.observation_id ?? null,\n  status: result.status ?? 'accepted', is_new: Boolean(result.is_new),\n  signal_count: Number(result.signal_count ?? 0), source_count: Number(result.source_count ?? 0),\n  corroboration_status: result.corroboration_status ?? 'multi_source', openai_calls: 0 } }];"
+      }
+    },
+    {
+      "id": "5eb8664f-0000-4000-8000-8b0897962b2e",
+      "name": "Skipped Observation Candidate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        580
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const row = $input.first().json;\nreturn [{ json: { completed: false, skipped: true, provider_error: row.provider_error ?? null,\n  candidates_rejected: Number(row.candidates_rejected ?? 0), openai_calls: Number(row.openai_calls ?? 0) } }];"
+      }
+    },
+    {
+      "id": "134e20e3-0000-4000-8000-164db051a61e",
+      "name": "Observation Domain Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        180
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map((item) => item.json ?? {});\nreturn [{ json: { domain_completed: true, observations_persisted: rows.filter((row) => row.completed).length,\n  new_observations: rows.filter((row) => row.completed && row.is_new).length,\n  multi_source_observations: rows.filter((row) => row.completed && row.source_count >= 2).length,\n  candidates_rejected: rows.reduce((sum, row) => sum + Number(row.candidates_rejected ?? 0), 0),\n  provider_errors: [...new Set(rows.map((row) => row.provider_error).filter(Boolean))], openai_calls: 1 } }];"
+      }
+    },
+    {
+      "id": "5eb375fc-0000-4000-8000-15baabc1d286",
+      "name": "No Diverse Signals Domain Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        600
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: { domain_completed: true,\n  no_diverse_accepted_signals: true, observations_persisted: 0, new_observations: 0,\n  multi_source_observations: 0, candidates_rejected: 0, provider_errors: [], openai_calls: 0 } }];"
+      }
+    },
+    {
+      "id": "601bd9bb-0000-4000-8000-3f18b2e686bf",
+      "name": "Observation Engine Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        120
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map((item) => item.json ?? {});\nconst errors = [...new Set(rows.flatMap((row) => row.provider_errors ?? []).filter(Boolean))];\nreturn [{ json: { status: errors.length && rows.every((row) => Number(row.observations_persisted ?? 0) === 0)\n    ? 'failed' : (errors.length ? 'partial' : 'completed'),\n  domains_processed: rows.filter((row) => !row.no_diverse_accepted_signals).length,\n  no_diverse_accepted_signals: rows.some((row) => row.no_diverse_accepted_signals),\n  observations_persisted: rows.reduce((sum, row) => sum + Number(row.observations_persisted ?? 0), 0),\n  new_observations: rows.reduce((sum, row) => sum + Number(row.new_observations ?? 0), 0),\n  multi_source_observations: rows.reduce((sum, row) => sum + Number(row.multi_source_observations ?? 0), 0),\n  candidates_rejected: rows.reduce((sum, row) => sum + Number(row.candidates_rejected ?? 0), 0),\n  openai_calls: rows.reduce((sum, row) => sum + Number(row.openai_calls ?? 0), 0), provider_errors: errors,\n  output_status: 'accepted', note: 'Signal approval is the only human gate. Observations are automatically accepted only after two-signal, two-source, and bounded-language validation.' } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Observation Engine Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Observation Check": {
+      "main": [
+        [
+          {
+            "node": "Observation Engine Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Observation Engine Configuration": {
+      "main": [
+        [
+          {
+            "node": "Load Accepted Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Accepted Signals": {
+      "main": [
+        [
+          {
+            "node": "Build Diverse Signal Packs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Diverse Signal Packs": {
+      "main": [
+        [
+          {
+            "node": "Observation Domain Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Observation Domain Loop": {
+      "main": [
+        [
+          {
+            "node": "Observation Engine Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Diverse Accepted Signals?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Diverse Accepted Signals?": {
+      "main": [
+        [
+          {
+            "node": "Build Observation Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Diverse Signals Domain Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Observation Request": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Observation Synthesis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Observation Synthesis": {
+      "main": [
+        [
+          {
+            "node": "Validate Observation Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Observation Candidates": {
+      "main": [
+        [
+          {
+            "node": "Observation Candidate Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Observation Candidate Loop": {
+      "main": [
+        [
+          {
+            "node": "Observation Domain Complete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Valid Observation?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Valid Observation?": {
+      "main": [
+        [
+          {
+            "node": "Persist Validated Observation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skipped Observation Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Validated Observation": {
+      "main": [
+        [
+          {
+            "node": "Auto-Accept Observation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto-Accept Observation": {
+      "main": [
+        [
+          {
+            "node": "Observation Candidate Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Observation Candidate Complete": {
+      "main": [
+        [
+          {
+            "node": "Observation Candidate Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skipped Observation Candidate": {
+      "main": [
+        [
+          {
+            "node": "Observation Candidate Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Observation Domain Complete": {
+      "main": [
+        [
+          {
+            "node": "Observation Domain Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Diverse Signals Domain Complete": {
+      "main": [
+        [
+          {
+            "node": "Observation Domain Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "tags": [],
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionTimeout": 1800
+  }
+}

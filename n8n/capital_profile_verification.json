@@ -1,0 +1,787 @@
+{
+  "name": "RE 06 - Capital Profile Verification",
+  "nodes": [
+    {
+      "id": "2ab74b16-0000-4000-8000-01421a99f4a0",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        240
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "111c59de-0000-4000-8000-d080674883f7",
+      "name": "Weekly Verification",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bf895aee-0000-4000-8000-579eb81bec67",
+      "name": "Verification Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: {\n  supabase_url: 'https://jaeltkzfjgrzgxgzxlfs.supabase.co',\n  workspace_id: 'a51b8277-4cd5-4f8a-9ffd-4ddbe56683da',\n  candidate_limit: 3,\n  tavily_results_per_candidate: 3,\n  max_source_chars: 18000,\n  minimum_source_chars: 500,\n  model: 'gpt-6-luna',\n  minimum_profile_confidence: 0.72,\n  profile_version: 'capital-profile-v1.0.0'\n} }];"
+      }
+    },
+    {
+      "id": "4f640b6d-0000-4000-8000-7d19e2dae94d",
+      "name": "Load Verification Queue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        320
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.supabase_url + '/rest/v1/rpc/n8n_list_capital_profile_candidates' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_workspace_id: $json.workspace_id, p_limit: $json.candidate_limit }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "80b6d5a6-0000-4000-8000-874b19746ed6",
+      "name": "Normalize Verification Queue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const config = $('Verification Configuration').first().json;\nconst raw = $input.all().flatMap((item) => Array.isArray(item.json) ? item.json : [item.json]);\nconst rows = raw.filter((row) => row && row.entity_id && row.name).slice(0, config.candidate_limit);\nif (!rows.length) return [{ json: { no_candidate: true, config } }];\nreturn rows.map((row) => ({ json: { ...row, config, no_candidate: false } }));"
+      }
+    },
+    {
+      "id": "61ad50ff-0000-4000-8000-0244ef2c2c74",
+      "name": "Capital Candidate Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        960,
+        320
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "88820480-0000-4000-8000-38ecde04f323",
+      "name": "Has Verification Candidate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        440
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "2f2774b2-0000-4000-8000-a6c770c65be6",
+              "leftValue": "={{ $json.no_candidate !== true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b0e0c880-0000-4000-8000-60eb8ad8a5e0",
+      "name": "Build Official Search",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        360
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const candidate = $input.first().json;\nconst country = candidate.registry_country || 'India';\nreturn [{ json: { ...candidate,\n  query: '\"' + candidate.name.replace(/\"/g, '') + '\" official website investment thesis portfolio ' + country,\n  result_limit: candidate.config.tavily_results_per_candidate\n} }];"
+      }
+    },
+    {
+      "id": "2a40849e-0000-4000-8000-7872201cbcbb",
+      "name": "Tavily Official Search",
+      "type": "@tavily/n8n-nodes-tavily.tavily",
+      "typeVersion": 1,
+      "position": [
+        1680,
+        360
+      ],
+      "parameters": {
+        "query": "={{ $json.query }}",
+        "options": {
+          "search_depth": "basic",
+          "max_results": "={{ $json.result_limit }}"
+        }
+      },
+      "credentials": {
+        "tavilyApi": {
+          "id": "2zOgpdnN8HyOetb2",
+          "name": "Tavily account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "c7351e18-0000-4000-8000-c49df9a3530b",
+      "name": "Select Credible Official Page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        360
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const candidate = $('Build Official Search').first().json;\nconst response = $input.first().json ?? {};\nconst payload = response.data && Array.isArray(response.data.results) ? response.data : response;\nconst results = Array.isArray(payload.results) ? payload.results : [];\n\nconst blocked = /(^|\\.)(linkedin|crunchbase|tracxn|pitchbook|wikipedia|wikidata|reddit|x|twitter|youtube|facebook|instagram|sebi)(\\.|$)/i;\nconst unsafeHost = /^(localhost|0\\.0\\.0\\.0|127\\.|10\\.|192\\.168\\.|169\\.254\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.)/i;\n\nconst stopwords = new Set([\n  'venture', 'ventures', 'capital', 'fund', 'funds', 'partners',\n  'management', 'india', 'private', 'limited', 'llp'\n]);\n\nconst allTokens = String(candidate.name ?? '')\n  .toLowerCase()\n  .split(/[^a-z0-9]+/)\n  .filter((token) => token.length >= 2);\n\nconst distinctiveTokens = allTokens.filter((token) => !stopwords.has(token));\nconst tokens = distinctiveTokens.length ? distinctiveTokens : allTokens;\n\nconst assess = (result) => {\n  try {\n    const url = new URL(String(result.url ?? ''));\n\n    if (\n      !/^https?:$/.test(url.protocol) ||\n      blocked.test(url.hostname) ||\n      unsafeHost.test(url.hostname)\n    ) {\n      return null;\n    }\n\n    const haystack = (\n      String(result.title ?? '') + ' ' +\n      String(result.content ?? result.snippet ?? '') + ' ' +\n      url.hostname\n    ).toLowerCase();\n\n    const tokenMatches = tokens.filter((token) => haystack.includes(token)).length;\n    const nameCoverage = tokens.length ? tokenMatches / tokens.length : 0;\n\n    const pathBonus =\n      /(about|portfolio|companies|investments?|thesis|strategy|focus)(\\/|$)/i.test(url.pathname)\n        ? 0.15\n        : 0;\n\n    const score = Number(result.score ?? 0) + nameCoverage + pathBonus;\n\n    return nameCoverage >= 0.5\n      ? { result, url: url.toString(), score }\n      : null;\n  } catch {\n    return null;\n  }\n};\n\nconst ranked = results\n  .map(assess)\n  .filter(Boolean)\n  .sort((a, b) => b.score - a.score);\n\nlet selected = ranked[0] ?? null;\n\nif (!selected && candidate.current_canonical_url) {\n  try {\n    const url = new URL(candidate.current_canonical_url);\n\n    if (\n      /^https?:$/.test(url.protocol) &&\n      !blocked.test(url.hostname) &&\n      !unsafeHost.test(url.hostname)\n    ) {\n      selected = {\n        url: url.toString(),\n        score: 0.5\n      };\n    }\n  } catch {}\n}\n\nreturn [{\n  json: {\n    ...candidate,\n    search_result_count: results.length,\n    selected_url: selected?.url ?? null,\n    canonical_url: selected?.url ?? null,\n    selected_search_score: selected?.score ?? 0,\n    has_credible_page: Boolean(selected)\n  }\n}];"
+      }
+    },
+    {
+      "id": "aff2dd29-0000-4000-8000-e2bd24bad4c0",
+      "name": "Has Credible Official Page?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2160,
+        360
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fd97d847-0000-4000-8000-f31bad0b2a33",
+              "leftValue": "={{ $json.has_credible_page === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "210a7e18-0000-4000-8000-64a4f0c6c972",
+      "name": "Firecrawl Official Page",
+      "type": "@mendable/n8n-nodes-firecrawl.firecrawl",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        280
+      ],
+      "parameters": {
+        "operation": "scrape",
+        "url": "={{ $json.canonical_url }}",
+        "requestOptions": {}
+      },
+      "credentials": {
+        "firecrawlApi": {
+          "id": "yIMOx1xvRIQDmKGL",
+          "name": "Firecrawl account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "afe33286-0000-4000-8000-aa5457af5484",
+      "name": "Normalize Official Page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        280
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const candidate = $('Select Credible Official Page').first().json;\nconst response = $input.first().json ?? {};\nconst data = response.data && typeof response.data === 'object' ? response.data : response;\n\nconst raw = String(\n  data.markdown ??\n  response.markdown ??\n  data.content ??\n  response.content ??\n  ''\n);\n\nlet content = raw\n  .replace(/data:image\\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=\\\\s]+/g, '')\n  .replace(/\\n{4,}/g, '\\n\\n\\n')\n  .trim();\n\nconst extracted_char_count = content.length;\n\nif (content.length > Number(candidate.config.max_source_chars ?? 18000)) {\n  content = content.slice(0, Number(candidate.config.max_source_chars ?? 18000));\n}\n\nconst extraction_ok =\n  !response.error &&\n  !data.error &&\n  content.length >= Number(candidate.config.minimum_source_chars ?? 500);\n\nreturn [{\n  json: {\n    ...candidate,\n    content_text: content,\n    extracted_char_count,\n    extraction_ok,\n    extraction_error: extraction_ok\n      ? null\n      : (response.error\n          ? 'FIRECRAWL_REQUEST_FAILED'\n          : 'OFFICIAL_PAGE_CONTENT_INSUFFICIENT')\n  }\n}];"
+      }
+    },
+    {
+      "id": "34e3c257-0000-4000-8000-ca2afdad2b1f",
+      "name": "Official Content Usable?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2880,
+        280
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "2f7eefc8-0000-4000-8000-f6e872210a44",
+              "leftValue": "={{ $json.extraction_ok === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "95517681-0000-4000-8000-d340947ccb66",
+      "name": "Build Profile Extraction Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const candidate = $input.first().json;\nconst stringArray = (maxItems) => ({ type: 'array', maxItems, items: { type: 'string' } });\nconst schema = { type: 'object', additionalProperties: false, properties: {\n  is_official_profile: { type: 'boolean' }, official_name: { type: 'string' }, official_website_url: { type: 'string' },\n  stated_thesis_summary: { type: 'string' }, sectors: stringArray(20), stages: stringArray(12),\n  geographies: stringArray(15), typical_check_size: { type: 'string' },\n  portfolio_company_names: stringArray(30), evidence_quotes: stringArray(6), confidence: { type: 'number' }\n}, required: ['is_official_profile','official_name','official_website_url','stated_thesis_summary','sectors','stages','geographies','typical_check_size','portfolio_company_names','evidence_quotes','confidence'] };\nconst input = { target_name: candidate.name, target_type: candidate.entity_type, selected_url: candidate.selected_url,\n  instruction: 'Profile the named capital entity only.', source_text: candidate.content_text };\nreturn [{ json: { ...candidate, openai_request: { model: candidate.config.model, store: false, max_output_tokens: 1400,\n  instructions: 'Use only the supplied page text. Confirm whether the page is an official page for the target entity. Extract only explicitly stated investment thesis, sectors, stages, geographies, check size, and portfolio company names. Evidence quotes must be exact short excerpts from the source. Return empty strings or arrays when absent. Do not infer current investing activity, investments, amounts, dates, or relationships. Do not treat navigation, news mentions, directories, or third-party profiles as official.',\n  input: [{ role: 'user', content: [{ type: 'input_text', text: JSON.stringify(input) }] }],\n  text: { format: { type: 'json_schema', name: 'capital_official_profile', strict: true, schema } }\n} } }];"
+      }
+    },
+    {
+      "id": "06fc73c5-0000-4000-8000-bea51e3a8dd7",
+      "name": "OpenAI Profile Extraction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3360,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.openai_request) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "7a0hdZ68ejgk6EnD",
+          "name": "OpenAI account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "e62e4830-0000-4000-8000-caba01f80812",
+      "name": "Validate Official Profile",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3600,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const candidate = $('Build Profile Extraction Request').first().json;\nconst response = $input.first().json ?? {};\n\nconst outputText = (response.output ?? [])\n  .flatMap((item) => item.content ?? [])\n  .find((item) => item.type === 'output_text')\n  ?.text;\n\nlet parsed = null;\n\ntry {\n  if (outputText) parsed = JSON.parse(outputText);\n} catch {}\n\nconst cleanArray = (value, max) => [\n  ...new Set(\n    (Array.isArray(value) ? value : [])\n      .map((item) => String(item ?? '').replace(/\\s+/g, ' ').trim())\n      .filter(Boolean)\n  )\n].slice(0, max);\n\nconst normalize = (value) =>\n  String(value ?? '').replace(/\\s+/g, ' ').trim();\n\nconst content = normalize(candidate.content_text).toLowerCase();\n\nconst quotes = cleanArray(parsed?.evidence_quotes, 6)\n  .filter((quote) =>\n    content.includes(normalize(quote).toLowerCase())\n  );\n\nlet outputHost = '';\nlet selectedHost = '';\n\ntry {\n  outputHost = new URL(\n    String(parsed?.official_website_url ?? '')\n  ).hostname.replace(/^www\\./, '');\n} catch {}\n\ntry {\n  selectedHost = new URL(\n    String(candidate.selected_url ?? '')\n  ).hostname.replace(/^www\\./, '');\n} catch {}\n\nconst sameDomain = Boolean(\n  outputHost &&\n  selectedHost &&\n  (\n    outputHost === selectedHost ||\n    outputHost.endsWith('.' + selectedHost) ||\n    selectedHost.endsWith('.' + outputHost)\n  )\n);\n\nconst confidence = Math.max(\n  0,\n  Math.min(1, Number(parsed?.confidence ?? 0))\n);\n\nconst meaningful = Boolean(\n  normalize(parsed?.stated_thesis_summary) ||\n  cleanArray(parsed?.sectors, 20).length ||\n  cleanArray(parsed?.portfolio_company_names, 30).length\n);\n\nconst verified = Boolean(\n  parsed?.is_official_profile &&\n  sameDomain &&\n  quotes.length &&\n  meaningful &&\n  confidence >= Number(candidate.config.minimum_profile_confidence ?? 0.72)\n);\n\nreturn [{\n  json: {\n    p_profile: {\n      workspace_id: candidate.workspace_id,\n      entity_id: candidate.entity_id,\n      status: verified ? 'verified' : 'needs_review',\n      official_website_url: verified\n        ? String(parsed?.official_website_url ?? '')\n        : '',\n      profile_source_url: candidate.selected_url ?? '',\n      confidence,\n      stated_thesis_summary: verified\n        ? normalize(parsed?.stated_thesis_summary).slice(0, 4000)\n        : '',\n      sectors: verified ? cleanArray(parsed?.sectors, 20) : [],\n      stages: verified ? cleanArray(parsed?.stages, 12) : [],\n      geographies: verified ? cleanArray(parsed?.geographies, 15) : [],\n      typical_check_size: verified\n        ? normalize(parsed?.typical_check_size).slice(0, 500)\n        : '',\n      portfolio_company_names: verified\n        ? cleanArray(parsed?.portfolio_company_names, 30)\n        : [],\n      evidence_quotes: verified ? quotes : [],\n      _workflow_context: {\n        name: candidate.name,\n        outcome: verified ? 'verified' : 'needs_review',\n        reason: verified\n          ? null\n          : (!parsed\n              ? 'OPENAI_OUTPUT_INVALID'\n              : 'PROFILE_QUALITY_GATE'),\n        paid_calls: {\n          tavily: 1,\n          firecrawl: 1,\n          openai: 1\n        }\n      }\n    }\n  }\n}];"
+      }
+    },
+    {
+      "id": "94f12d66-0000-4000-8000-beb867f43fcd",
+      "name": "Prepare Search Review",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        520
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const candidate = $input.first().json;\nreturn [{ json: { p_profile: { workspace_id: candidate.workspace_id, entity_id: candidate.entity_id,\n  status: 'needs_review', official_website_url: '', profile_source_url: '', confidence: 0,\n  stated_thesis_summary: '', sectors: [], stages: [], geographies: [], typical_check_size: '',\n  portfolio_company_names: [], evidence_quotes: [], _workflow_context: { name: candidate.name,\n    outcome: 'needs_review', reason: 'NO_CREDIBLE_OFFICIAL_PAGE', paid_calls: { tavily: 1, firecrawl: 0, openai: 0 } }\n} } }];"
+      }
+    },
+    {
+      "id": "f0e4cafc-0000-4000-8000-6835c4388cac",
+      "name": "Prepare Content Review",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        440
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const candidate = $input.first().json;\nreturn [{ json: { p_profile: { workspace_id: candidate.workspace_id, entity_id: candidate.entity_id,\n  status: 'needs_review', official_website_url: '', profile_source_url: candidate.selected_url || '', confidence: 0,\n  stated_thesis_summary: '', sectors: [], stages: [], geographies: [], typical_check_size: '',\n  portfolio_company_names: [], evidence_quotes: [], _workflow_context: { name: candidate.name,\n    outcome: 'needs_review', reason: candidate.extraction_error || 'OFFICIAL_PAGE_CONTENT_INSUFFICIENT',\n    paid_calls: { tavily: 1, firecrawl: 1, openai: 0 } }\n} } }];"
+      }
+    },
+    {
+      "id": "c4f4b019-0000-4000-8000-d3ff8b1449c2",
+      "name": "Persist Official Profile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3840,
+        360
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Verification Configuration').first().json.supabase_url + '/rest/v1/rpc/n8n_update_capital_official_profile' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_profile: $json.p_profile }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "d73ce13b-0000-4000-8000-fb2d55ea09dd",
+      "name": "Profile Candidate Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4080,
+        360
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const response = $input.first().json ?? {};\nconst result = Array.isArray(response) ? (response[0] ?? {}) : response;\nconst context = result.workflow_context ?? {};\nreturn [{ json: { completed: true, entity_id: result.entity_id ?? null,\n  name: result.name ?? context.name ?? null, official_profile_status: result.official_profile_status ?? context.outcome ?? 'needs_review',\n  reason: context.reason ?? null, paid_calls: context.paid_calls ?? { tavily: 1, firecrawl: 0, openai: 0 },\n  activity_status_changed: result.activity_status_changed ?? false } }];"
+      }
+    },
+    {
+      "id": "f11b3182-0000-4000-8000-632aa3ca17d5",
+      "name": "No Candidate Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        600
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: { completed: false, no_candidate: true,\n  paid_calls: { tavily: 0, firecrawl: 0, openai: 0 }, activity_status_changed: false } }];"
+      }
+    },
+    {
+      "id": "3c5da30b-0000-4000-8000-c86082d038e1",
+      "name": "Capital Profile Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        120
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map((item) => item.json ?? {});\nconst calls = rows.reduce((sum, row) => ({ tavily: sum.tavily + Number(row.paid_calls?.tavily ?? 0),\n  firecrawl: sum.firecrawl + Number(row.paid_calls?.firecrawl ?? 0), openai: sum.openai + Number(row.paid_calls?.openai ?? 0) }),\n  { tavily: 0, firecrawl: 0, openai: 0 });\nreturn [{ json: { status: 'completed', candidates_processed: rows.filter((row) => row.completed).length,\n  profiles_verified: rows.filter((row) => row.official_profile_status === 'verified').length,\n  profiles_needing_review: rows.filter((row) => row.official_profile_status === 'needs_review').length,\n  no_candidates_due: rows.some((row) => row.no_candidate), provider_calls: calls,\n  activity_status_changes: rows.filter((row) => row.activity_status_changed === true).length,\n  note: 'Official profile verification does not assert current investing activity or create investment relationships.' } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Verification Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly Verification": {
+      "main": [
+        [
+          {
+            "node": "Verification Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verification Configuration": {
+      "main": [
+        [
+          {
+            "node": "Load Verification Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Verification Queue": {
+      "main": [
+        [
+          {
+            "node": "Normalize Verification Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Verification Queue": {
+      "main": [
+        [
+          {
+            "node": "Capital Candidate Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capital Candidate Loop": {
+      "main": [
+        [
+          {
+            "node": "Capital Profile Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Verification Candidate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Verification Candidate?": {
+      "main": [
+        [
+          {
+            "node": "Build Official Search",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Candidate Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Official Search": {
+      "main": [
+        [
+          {
+            "node": "Tavily Official Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tavily Official Search": {
+      "main": [
+        [
+          {
+            "node": "Select Credible Official Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Credible Official Page": {
+      "main": [
+        [
+          {
+            "node": "Has Credible Official Page?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Credible Official Page?": {
+      "main": [
+        [
+          {
+            "node": "Firecrawl Official Page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Search Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Firecrawl Official Page": {
+      "main": [
+        [
+          {
+            "node": "Normalize Official Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Official Page": {
+      "main": [
+        [
+          {
+            "node": "Official Content Usable?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Official Content Usable?": {
+      "main": [
+        [
+          {
+            "node": "Build Profile Extraction Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Content Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Profile Extraction Request": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Profile Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Profile Extraction": {
+      "main": [
+        [
+          {
+            "node": "Validate Official Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Official Profile": {
+      "main": [
+        [
+          {
+            "node": "Persist Official Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Search Review": {
+      "main": [
+        [
+          {
+            "node": "Persist Official Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Content Review": {
+      "main": [
+        [
+          {
+            "node": "Persist Official Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Official Profile": {
+      "main": [
+        [
+          {
+            "node": "Profile Candidate Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Profile Candidate Complete": {
+      "main": [
+        [
+          {
+            "node": "Capital Candidate Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Candidate Complete": {
+      "main": [
+        [
+          {
+            "node": "Capital Candidate Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "tags": [],
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionTimeout": 1800
+  }
+}

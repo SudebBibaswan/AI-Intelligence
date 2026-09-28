@@ -1,0 +1,616 @@
+{
+  "name": "RE 10 - Verified Hypothesis Engine",
+  "nodes": [
+    {
+      "id": "417cc038-0000-4000-8000-08ede44190ae",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        240
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "cecdfc7e-0000-4000-8000-c06226b01e1d",
+      "name": "Daily Hypothesis Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c7c9ff52-0000-4000-8000-fa63aa74ce8f",
+      "name": "Hypothesis Engine Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: {\n  supabase_url: 'https://jaeltkzfjgrzgxgzxlfs.supabase.co',\n  workspace_id: 'a51b8277-4cd5-4f8a-9ffd-4ddbe56683da',\n  domain_limit: 3,\n  patterns_per_domain: 10,\n  max_hypotheses_per_domain: 3,\n  min_strength_score: 0.7,\n  model: 'gpt-6-luna',\n  engine_version: 'hypothesis-engine-v1.0.0'\n} }];"
+      }
+    },
+    {
+      "id": "41240e5d-0000-4000-8000-24f74e56fb58",
+      "name": "Load Eligible Patterns",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        320
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.supabase_url + '/rest/v1/rpc/n8n_list_hypothesis_pattern_candidates' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_workspace_id: $json.workspace_id, p_domain_limit: $json.domain_limit, p_patterns_per_domain: $json.patterns_per_domain, p_min_strength_score: $json.min_strength_score }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "8cece127-0000-4000-8000-2c3f17e06dd1",
+      "name": "Build Diverse Pattern Packs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const config = $('Hypothesis Engine Configuration').first().json;\nconst rows = $input.all().flatMap((item) => Array.isArray(item.json) ? item.json : [item.json])\n  .filter((row) => row && row.pattern_id && row.workspace_domain_id);\nif (!rows.length) return [{ json: { config, no_patterns: true, pattern_items: [], pattern_count: 0 } }];\nconst groups = new Map();\nfor (const row of rows) {\n  const key = row.workspace_domain_id;\n  if (!groups.has(key)) groups.set(key, { config, no_patterns: false, workspace_id: row.workspace_id,\n    workspace_domain_id: key, domain_key: row.domain_key, domain_name: row.domain_name, pattern_items: [] });\n  groups.get(key).pattern_items.push({ pattern_id: row.pattern_id, pattern_type: row.pattern_type,\n    title: row.title, statement: row.statement, strength_score: row.strength_score,\n    persistence_score: row.persistence_score, diversity_score: row.evidence_diversity_score,\n    confidence: row.confidence, status: row.status, observation_count: Number(row.observation_count ?? 0),\n    source_family_count: Number(row.source_family_count ?? 0), event_entity_count: Number(row.event_entity_count ?? 0),\n    has_contradictions: Boolean(row.has_contradictions), first_detected_at: row.first_detected_at,\n    last_confirmed_at: row.last_confirmed_at, metadata: row.metadata ?? {} });\n}\nreturn [...groups.values()].map((pack) => ({ json: { ...pack, pattern_count: pack.pattern_items.length } }));"
+      }
+    },
+    {
+      "id": "b908180e-0000-4000-8000-1c319cd53da3",
+      "name": "Hypothesis Domain Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        960,
+        320
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "625656f6-0000-4000-8000-d410259a61ec",
+      "name": "Has Eligible Patterns?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        440
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "48500cd7-0000-4000-8000-befc0b9dc708",
+              "leftValue": "={{ $json.no_patterns !== true && $json.pattern_items.length >= 1 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "f0a881d7-0000-4000-8000-e0c749f902be",
+      "name": "Build Hypothesis Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        340
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pack = $input.first().json;\nconst patternReference = { type: 'object', additionalProperties: false, properties: {\n  pattern_id: { type: 'string' }, role: { type: 'string', enum: ['primary','supporting','contradicting','context'] },\n  weight: { type: 'number' }\n}, required: ['pattern_id','role','weight'] };\nconst hypothesis = { type: 'object', additionalProperties: false, properties: {\n  pattern_type: { type: 'string' },\n  title: { type: 'string' }, statement: { type: 'string' },\n  target_user: { type: 'string' }, problem: { type: 'string' }, proposed_value: { type: 'string' },\n  assumptions: { type: 'array', minItems: 1, items: { type: 'string' } },\n  falsifiers: { type: 'array', minItems: 1, items: { type: 'string' } },\n  validation_questions: { type: 'array', minItems: 1, items: { type: 'string' } },\n  confidence: { type: 'number' },\n  patterns: { type: 'array', minItems: 1, maxItems: 10, items: patternReference }\n}, required: ['pattern_type','title','statement','target_user','problem','assumptions','falsifiers','validation_questions','confidence','patterns'] };\nconst schema = { type: 'object', additionalProperties: false, properties: {\n  hypotheses: { type: 'array', maxItems: pack.config.max_hypotheses_per_domain, items: hypothesis }\n}, required: ['hypotheses'] };\nconst patternPack = { domain_key: pack.domain_key, domain_name: pack.domain_name,\n  eligible_patterns: pack.pattern_items };\nreturn [{ json: { ...pack, openai_request: { model: pack.config.model, store: false, max_output_tokens: 2200,\n  instructions: 'Create testable hypotheses from the eligible patterns supplied. Every hypothesis must cite at least one pattern_id. Identify a specific target user, a concrete problem, and explicit assumptions, falsifiers, and validation questions. Funding alone is not proof of demand. Do not declare facts, make predictions, or claim causation. Return an empty hypotheses array when no defensible hypothesis exists. Valid outputs are automatically advanced to ready_for_validation; signal review remains the only human gate.',\n  input: [{ role: 'user', content: [{ type: 'input_text', text: JSON.stringify(patternPack) }] }],\n  text: { format: { type: 'json_schema', name: 'pattern_hypotheses', strict: true, schema } }\n} } }];"
+      }
+    },
+    {
+      "id": "d6e90ed6-0000-4000-8000-f2f43dcbb909",
+      "name": "OpenAI Hypothesis Synthesis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        340
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.openai_request) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "7a0hdZ68ejgk6EnD",
+          "name": "OpenAI account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "e86e5976-0000-4000-8000-7a3defe6e963",
+      "name": "Validate Hypothesis Candidates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        340
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pack = $('Build Hypothesis Request').item.json;\nconst response = $input.first().json ?? {};\nconst outputText = (response.output ?? []).flatMap((item) => item.content ?? []).find((item) => item.type === 'output_text')?.text;\nlet parsed = null;\ntry { if (outputText) parsed = JSON.parse(outputText); } catch {}\nconst patternById = new Map(pack.pattern_items.map((item) => [item.pattern_id, item]));\nconst normalizeText = (value, max) => {\n  const raw = String(value ?? '');\n  let output = '';\n  let pendingSpace = false;\n  for (const character of raw) {\n    if (character.trim() === '') { pendingSpace = output.length > 0; continue; }\n    if (pendingSpace) output += ' ';\n    output += character;\n    pendingSpace = false;\n    if (output.length >= max) break;\n  }\n  return output.trim().slice(0, max);\n};\nconst forbiddenWords = new Set(['funding proves','funding alone','capital proves','investment proves','proves demand','validates demand','confirms demand']);\nconst seen = new Set();\nconst valid = [];\nlet rejected = 0;\nfor (const candidate of (Array.isArray(parsed?.hypotheses) ? parsed.hypotheses : [])) {\n  const title = normalizeText(candidate.title, 240);\n  const statement = normalizeText(candidate.statement, 2000);\n  const targetUser = normalizeText(candidate.target_user, 500);\n  const problem = normalizeText(candidate.problem, 2000);\n  const proposedValue = normalizeText(candidate.proposed_value, 2000);\n  const refs = (Array.isArray(candidate.patterns) ? candidate.patterns : []).filter((ref) => patternById.has(ref.pattern_id));\n  const uniqueRefs = [...new Map(refs.map((ref) => [ref.pattern_id, ref])).values()].slice(0, 10);\n  const assumptions = (Array.isArray(candidate.assumptions) ? candidate.assumptions : []).map((a) => normalizeText(a, 500)).filter(Boolean);\n  const falsifiers = (Array.isArray(candidate.falsifiers) ? candidate.falsifiers : []).map((f) => normalizeText(f, 500)).filter(Boolean);\n  const validationQuestions = (Array.isArray(candidate.validation_questions) ? candidate.validation_questions : []).map((q) => normalizeText(q, 500)).filter(Boolean);\n  const confidence = Math.max(0, Math.min(1, Number(candidate.confidence ?? 0)));\n  const words = (title + ' ' + statement + ' ' + targetUser + ' ' + problem).toLowerCase();\n  const fundingOnlyClaim = [...forbiddenWords].some((phrase) => words.includes(phrase));\n  const key = (candidate.pattern_type ?? '') + ':' + targetUser.toLowerCase() + ':' + problem.toLowerCase() + ':' + uniqueRefs.map(r => r.pattern_id).sort().join(',');\n  if (!title || title.length < 8 || !statement || statement.length < 30\n    || !targetUser || targetUser.length < 3\n    || !problem || problem.length < 10\n    || uniqueRefs.length < 1\n    || assumptions.length < 1 || falsifiers.length < 1 || validationQuestions.length < 1\n    || fundingOnlyClaim || seen.has(key)) { rejected++; continue; }\n  seen.add(key);\n  valid.push({ p_hypothesis: { workspace_id: pack.workspace_id, workspace_domain_id: pack.workspace_domain_id,\n    pattern_type: candidate.pattern_type ?? pack.pattern_items[0]?.pattern_type ?? 'other',\n    title, statement, target_user: targetUser, problem, proposed_value: proposedValue,\n    assumptions, falsifiers, validation_questions: validationQuestions, confidence,\n    patterns: uniqueRefs.map((ref) => ({ pattern_id: ref.pattern_id,\n      role: ['primary','supporting','contradicting','context'].includes(ref.role) ? ref.role : 'supporting',\n      weight: Math.max(0, Math.min(1, Number(ref.weight ?? 0.7))) })),\n    engine_version: pack.config.engine_version, metadata: { generation_mode: 'eligible_patterns_only',\n      input_pattern_count: uniqueRefs.length, domain_key: pack.domain_key }\n  }, candidate_quality: { input_pattern_count: uniqueRefs.length } });\n}\nif (!valid.length) return [{ json: { no_hypothesis: true, workspace_domain_id: pack.workspace_domain_id,\n  domain_key: pack.domain_key, provider_error: response.error ? 'OPENAI_HYPOTHESIS_REQUEST_FAILED' : null,\n  candidates_rejected: rejected, openai_calls: 1 } }];\nreturn valid.map((item) => ({ json: { ...item, no_hypothesis: false,\n  candidates_rejected: rejected, openai_calls: 1 } }));"
+      }
+    },
+    {
+      "id": "2b972268-0000-4000-8000-4342f2d2ebb1",
+      "name": "Hypothesis Candidate Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2160,
+        340
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "2d785f8d-0000-4000-8000-04ace80bc00c",
+      "name": "Has Valid Hypothesis?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2400,
+        460
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "2589e61f-0000-4000-8000-457f84fd2bbb",
+              "leftValue": "={{ $json.no_hypothesis !== true && Boolean($json.p_hypothesis) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "38c6d338-0000-4000-8000-cf35f38668ef",
+      "name": "Persist Validated Hypothesis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        380
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Hypothesis Engine Configuration').item.json.supabase_url + '/rest/v1/rpc/n8n_upsert_verified_hypothesis' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_hypothesis: $json.p_hypothesis }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "4f232b70-0000-4000-8000-8fa6b85a1b95",
+      "name": "Hypothesis Candidate Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        380
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const response = $input.first().json ?? {};\nconst result = Array.isArray(response) ? (response[0] ?? {}) : response;\nreturn [{ json: { completed: true, hypothesis_id: result.hypothesis_id ?? null,\n  status: result.status ?? 'ready_for_validation', is_new: Boolean(result.is_new),\n  pattern_count: Number(result.pattern_count ?? 0), confidence: Number(result.confidence ?? 0),\n  openai_calls: 0 } }];"
+      }
+    },
+    {
+      "id": "5f1477ae-0000-4000-8000-3189bb8056cd",
+      "name": "Skipped Hypothesis Candidate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        580
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const row = $input.first().json;\nreturn [{ json: { completed: false, skipped: true, provider_error: row.provider_error ?? null,\n  candidates_rejected: Number(row.candidates_rejected ?? 0), openai_calls: Number(row.openai_calls ?? 0) } }];"
+      }
+    },
+    {
+      "id": "38c639fe-0000-4000-8000-8d3cf2ddc275",
+      "name": "Hypothesis Domain Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        180
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map((item) => item.json ?? {});\nreturn [{ json: { domain_completed: true, hypotheses_persisted: rows.filter((row) => row.completed).length,\n  new_hypotheses: rows.filter((row) => row.completed && row.is_new).length,\n  candidates_rejected: rows.reduce((sum, row) => sum + Number(row.candidates_rejected ?? 0), 0),\n  provider_errors: [...new Set(rows.map((row) => row.provider_error).filter(Boolean))], openai_calls: 1 } }];"
+      }
+    },
+    {
+      "id": "df15ba7c-0000-4000-8000-47c0a61fda04",
+      "name": "No Eligible Patterns Domain Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        600
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: { domain_completed: true,\n  no_eligible_patterns: true, hypotheses_persisted: 0, new_hypotheses: 0,\n  candidates_rejected: 0, provider_errors: [], openai_calls: 0 } }];"
+      }
+    },
+    {
+      "id": "81776d78-0000-4000-8000-23b7c5ea4d16",
+      "name": "Hypothesis Engine Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        120
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map((item) => item.json ?? {});\nconst errors = [...new Set(rows.flatMap((row) => row.provider_errors ?? []).filter(Boolean))];\nreturn [{ json: { status: errors.length && rows.every((row) => Number(row.hypotheses_persisted ?? 0) === 0)\n    ? 'failed' : (errors.length ? 'partial' : 'completed'),\n  domains_processed: rows.filter((row) => !row.no_eligible_patterns).length,\n  no_eligible_patterns: rows.some((row) => row.no_eligible_patterns),\n  hypotheses_persisted: rows.reduce((sum, row) => sum + Number(row.hypotheses_persisted ?? 0), 0),\n  new_hypotheses: rows.reduce((sum, row) => sum + Number(row.new_hypotheses ?? 0), 0),\n  candidates_rejected: rows.reduce((sum, row) => sum + Number(row.candidates_rejected ?? 0), 0),\n  openai_calls: rows.reduce((sum, row) => sum + Number(row.openai_calls ?? 0), 0), provider_errors: errors,\n  output_status: 'ready_for_validation', note: 'Signal approval is the only human gate. Hypotheses are auto-advanced to ready_for_validation from eligible patterns. No new human review is introduced. RE11 Adversarial Validation will determine final result.' } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Hypothesis Engine Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Hypothesis Check": {
+      "main": [
+        [
+          {
+            "node": "Hypothesis Engine Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hypothesis Engine Configuration": {
+      "main": [
+        [
+          {
+            "node": "Load Eligible Patterns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Eligible Patterns": {
+      "main": [
+        [
+          {
+            "node": "Build Diverse Pattern Packs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Diverse Pattern Packs": {
+      "main": [
+        [
+          {
+            "node": "Hypothesis Domain Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hypothesis Domain Loop": {
+      "main": [
+        [
+          {
+            "node": "Hypothesis Engine Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Eligible Patterns?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Eligible Patterns?": {
+      "main": [
+        [
+          {
+            "node": "Build Hypothesis Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Eligible Patterns Domain Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Hypothesis Request": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Hypothesis Synthesis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Hypothesis Synthesis": {
+      "main": [
+        [
+          {
+            "node": "Validate Hypothesis Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Hypothesis Candidates": {
+      "main": [
+        [
+          {
+            "node": "Hypothesis Candidate Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hypothesis Candidate Loop": {
+      "main": [
+        [
+          {
+            "node": "Hypothesis Domain Complete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Valid Hypothesis?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Valid Hypothesis?": {
+      "main": [
+        [
+          {
+            "node": "Persist Validated Hypothesis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skipped Hypothesis Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Validated Hypothesis": {
+      "main": [
+        [
+          {
+            "node": "Hypothesis Candidate Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hypothesis Candidate Complete": {
+      "main": [
+        [
+          {
+            "node": "Hypothesis Candidate Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skipped Hypothesis Candidate": {
+      "main": [
+        [
+          {
+            "node": "Hypothesis Candidate Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hypothesis Domain Complete": {
+      "main": [
+        [
+          {
+            "node": "Hypothesis Domain Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Eligible Patterns Domain Complete": {
+      "main": [
+        [
+          {
+            "node": "Hypothesis Domain Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "tags": [],
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionTimeout": 1800
+  }
+}

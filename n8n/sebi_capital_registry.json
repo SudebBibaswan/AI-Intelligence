@@ -1,0 +1,322 @@
+{
+  "name": "RE 05 - SEBI Regulated Capital Registry",
+  "nodes": [
+    {
+      "id": "4cda42b4-0000-4000-8000-117c5507529c",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        240
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "b1cf9a5e-0000-4000-8000-908368f0ebd8",
+      "name": "Every Four Weeks",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 4
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cf355c7c-0000-4000-8000-2f55b43d664a",
+      "name": "SEBI Registry Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: {\n  supabase_url: 'https://jaeltkzfjgrzgxgzxlfs.supabase.co',\n  workspace_id: 'a51b8277-4cd5-4f8a-9ffd-4ddbe56683da',\n  country: 'India',\n  registry_source_url: 'https://www.sebi.gov.in/sebiweb/other/OtherAction.do?doRecognisedFpi=yes&intmId=21',\n  registry_export_url: 'https://www.sebi.gov.in/sebiweb/other/IntmExportAction.do?intmId=21',\n  registry_version: 'sebi-vcf-registry-v1.0.0',\n  max_rows: 500\n} }];"
+      }
+    },
+    {
+      "id": "74e702ed-0000-4000-8000-3174ba47c6ac",
+      "name": "Download SEBI VCF Registry",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        320
+      ],
+      "parameters": {
+        "url": "={{ $('SEBI Registry Configuration').item.json.registry_export_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.ms-excel"
+            },
+            {
+              "name": "User-Agent",
+              "value": "AI-Intelligence-Research/1.0 (https://github.com/dbakshatjain23-ux/AI-Intelligence)"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 60000
+    },
+    {
+      "id": "8e09ea86-0000-4000-8000-caa007c9ddb6",
+      "name": "Extract SEBI Spreadsheet",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        760,
+        320
+      ],
+      "parameters": {
+        "operation": "xls",
+        "binaryPropertyName": "data",
+        "options": {}
+      }
+    },
+    {
+      "id": "767aed55-0000-4000-8000-46bcc34c435f",
+      "name": "Normalize SEBI Funds",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const config = $('SEBI Registry Configuration').first().json;\n\nconst inputRows = $input\n  .all()\n  .map((item) => item.json ?? {})\n  .filter((row) => row && Object.keys(row).length > 0);\n\nconst maxRows = Math.max(\n  1,\n  Math.min(1000, Number(config.max_rows ?? 500))\n);\n\nconst clean = (value, max = 2000) =>\n  String(value ?? '')\n    .replace(/\\s+/g, ' ')\n    .trim()\n    .slice(0, max);\n\nconst normalize = (value) =>\n  clean(value)\n    .toLowerCase()\n    .replace(/[^a-z0-9]+/g, ' ')\n    .trim();\n\nconst aliases = {\n  name: ['name', 'fund name', 'venture capital fund name'],\n  registration_number: [\n    'registration no.',\n    'registration no',\n    'registration number',\n    'registration'\n  ],\n  contact_person: ['contact person', 'contact'],\n  address: ['address'],\n  correspondence_address: ['correspondence address'],\n  email: ['email-id', 'email id', 'email', 'e mail id'],\n  telephone: ['telephone', 'telephone no', 'phone', 'phone no'],\n  fax: ['fax'],\n  city: ['city'],\n  state: ['state'],\n  pincode: ['pincode', 'pin code', 'postal code'],\n  validity: ['validity'],\n  from: ['from', 'registration from'],\n  to: ['to', 'registration to']\n};\n\nconst matchesAlias = (value, aliasList) => {\n  const normalized = normalize(value);\n  return aliasList.some((alias) => {\n    const a = normalize(alias);\n    return normalized === a || normalized.includes(a);\n  });\n};\n\n// SEBI's XLS export can contain title/header rows before the actual\n// table header. The n8n XLS extractor may represent those headers as\n// \"__EMPTY\", \"__EMPTY_1\", etc. Detect the real header row from its values.\nconst headerScore = (row) => {\n  const values = Object.values(row).map(normalize).filter(Boolean);\n  let score = 0;\n\n  for (const aliasesForField of Object.values(aliases)) {\n    if (values.some((value) => aliasesForField.some((alias) => {\n      const a = normalize(alias);\n      return value === a || value.includes(a);\n    }))) {\n      score++;\n    }\n  }\n\n  return score;\n};\n\nlet headerIndex = -1;\nlet bestHeaderScore = 0;\n\nfor (let i = 0; i < inputRows.length; i++) {\n  const score = headerScore(inputRows[i]);\n  if (score > bestHeaderScore) {\n    bestHeaderScore = score;\n    headerIndex = i;\n  }\n}\n\nif (headerIndex < 0 || bestHeaderScore < 2) {\n  throw new Error(\n    `SEBI_HEADER_ROW_NOT_FOUND. Could not identify the table header. ` +\n    `Best score=${bestHeaderScore}.`\n  );\n}\n\nconst headerRow = inputRows[headerIndex];\n\n// Map canonical fields to the actual source keys used by the extractor.\nconst sourceKeyFor = (field) => {\n  const candidates = aliases[field] ?? [];\n  const entry = Object.entries(headerRow).find(([, value]) =>\n    candidates.some((alias) => matchesAlias(value, [alias]))\n  );\n  return entry?.[0] ?? null;\n};\n\nconst sourceKeys = {\n  name: sourceKeyFor('name'),\n  registration_number: sourceKeyFor('registration_number'),\n  contact_person: sourceKeyFor('contact_person'),\n  address: sourceKeyFor('address'),\n  correspondence_address: sourceKeyFor('correspondence_address'),\n  email: sourceKeyFor('email'),\n  telephone: sourceKeyFor('telephone'),\n  fax: sourceKeyFor('fax'),\n  city: sourceKeyFor('city'),\n  state: sourceKeyFor('state'),\n  pincode: sourceKeyFor('pincode'),\n  validity: sourceKeyFor('validity'),\n  from: sourceKeyFor('from'),\n  to: sourceKeyFor('to')\n};\n\nif (!sourceKeys.name || !sourceKeys.registration_number) {\n  throw new Error(\n    `SEBI_COLUMNS_NOT_FOUND. ` +\n    `Detected header row at index ${headerIndex}, ` +\n    `but Name/Registration No. could not be mapped.`\n  );\n}\n\nconst getValue = (row, field) => {\n  const key = sourceKeys[field];\n  return key ? clean(row[key]) : '';\n};\n\nconst deduplicated = new Map();\nlet invalidRows = 0;\n\n// Only process rows after the real header row.\n// This prevents SEBI title/header rows from being interpreted as funds.\nconst dataRows = inputRows.slice(headerIndex + 1);\n\nfor (const row of dataRows) {\n  const name = getValue(row, 'name');\n  const registrationNumber = getValue(row, 'registration_number').toUpperCase();\n\n  // Ignore repeated header rows and empty rows.\n  if (\n    !name ||\n    !registrationNumber ||\n    normalize(name) === 'name' ||\n    normalize(registrationNumber).startsWith('registration')\n  ) {\n    continue;\n  }\n\n  // SEBI VCF registration numbers normally look like IN/VCF/YY-YY/NNN.\n  // Keep the validation tolerant enough for minor format changes.\n  const registrationValid =\n    /^IN\\/(?:VCF|VC)\\/\\d{2}-\\d{2}\\/\\d+$/.test(registrationNumber);\n\n  if (!registrationValid) {\n    invalidRows++;\n    continue;\n  }\n\n  const validity = getValue(row, 'validity');\n  const registrationFrom = getValue(row, 'from');\n  const registrationTo = getValue(row, 'to');\n  const address = getValue(row, 'address') || getValue(row, 'correspondence_address');\n  const city = getValue(row, 'city');\n  const state = getValue(row, 'state');\n  const pincode = getValue(row, 'pincode');\n\n  const entity = {\n    registration_number: registrationNumber,\n    workspace_id: config.workspace_id,\n    entity_type: 'fund',\n    name,\n    canonical_url: null,\n    external_ids: {\n      sebi_registration_no: registrationNumber\n    },\n    attributes: {\n      registry_source: 'sebi',\n      registry_source_url: config.registry_source_url,\n      registry_country: config.country,\n      registry_status: 'regulated_identity',\n      regulatory_status: 'registered',\n      activity_verification_status: 'unverified',\n      registry_version: config.registry_version,\n      registry_last_seen_at: new Date().toISOString(),\n      ...(validity ? { registry_validity: validity } : {}),\n      ...(registrationFrom ? { registration_from: registrationFrom } : {}),\n      ...(registrationTo ? { registration_to: registrationTo } : {}),\n      ...(address ? { registry_address: address } : {}),\n      ...(city ? { registry_city: city } : {}),\n      ...(state ? { registry_state: state } : {}),\n      ...(pincode ? { registry_pincode: pincode } : {})\n    }\n  };\n\n  // Registration number is the stable deduplication key.\n  deduplicated.set(registrationNumber, entity);\n\n  if (deduplicated.size >= maxRows) {\n    break;\n  }\n}\n\nif (!deduplicated.size) {\n  throw new Error(\n    `NO_VALID_SEBI_VCF_ROWS. ` +\n    `Detected header at row ${headerIndex + 1}, ` +\n    `header score=${bestHeaderScore}, ` +\n    `data rows=${dataRows.length}, ` +\n    `invalid rows=${invalidRows}.`\n  );\n}\n\nconst entities = [...deduplicated.values()];\n\nreturn entities.map((entity) => ({\n  json: {\n    p_entity: entity,\n    import_quality: {\n      source_rows: inputRows.length,\n      header_row: headerIndex + 1,\n      data_rows: dataRows.length,\n      invalid_rows: invalidRows,\n      valid_rows: entities.length\n    }\n  }\n}));"
+      }
+    },
+    {
+      "id": "c582a0e8-0000-4000-8000-fbb0a8b2844f",
+      "name": "SEBI Fund Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1280,
+        320
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "eba28398-0000-4000-8000-ec5199b9cd7a",
+      "name": "Upsert Regulated Fund",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        440
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('SEBI Registry Configuration').first().json.supabase_url + '/rest/v1/rpc/n8n_upsert_regulated_capital_entity' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_entity: $json.p_entity }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "3c356ac3-0000-4000-8000-780dc503e381",
+      "name": "Regulated Fund Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        440
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const response = $input.first().json ?? {};\nconst result = Array.isArray(response) ? (response[0] ?? {}) : response;\nreturn [{ json: {\n  completed: true,\n  entity_id: result.entity_id ?? null,\n  registration_number: result.registration_number ?? null,\n  regulatory_status: result.regulatory_status ?? null,\n  activity_verification_status: result.activity_verification_status ?? null,\n  import_quality: null\n} }];"
+      }
+    },
+    {
+      "id": "f765cca4-0000-4000-8000-f55459bc2ad6",
+      "name": "SEBI Registry Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        160
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map((item) => item.json ?? {});\nconst quality = rows.find((row) => row.import_quality)?.import_quality ?? {};\nreturn [{ json: {\n  status: rows.length ? 'completed' : 'failed',\n  source: 'SEBI Registered Venture Capital Funds',\n  source_rows: Number(quality.source_rows ?? 0),\n  valid_registry_rows: Number(quality.valid_rows ?? rows.length),\n  invalid_registry_rows: Number(quality.invalid_rows ?? 0),\n  regulated_funds_upserted: rows.filter((row) => row.completed).length,\n  activity_claims_created: 0,\n  note: 'SEBI registration resolves fund identity; recent investment activity still requires grounded evidence.'\n} }];"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "SEBI Registry Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every Four Weeks": {
+      "main": [
+        [
+          {
+            "node": "SEBI Registry Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SEBI Registry Configuration": {
+      "main": [
+        [
+          {
+            "node": "Download SEBI VCF Registry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download SEBI VCF Registry": {
+      "main": [
+        [
+          {
+            "node": "Extract SEBI Spreadsheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract SEBI Spreadsheet": {
+      "main": [
+        [
+          {
+            "node": "Normalize SEBI Funds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize SEBI Funds": {
+      "main": [
+        [
+          {
+            "node": "SEBI Fund Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SEBI Fund Loop": {
+      "main": [
+        [
+          {
+            "node": "SEBI Registry Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Upsert Regulated Fund",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Regulated Fund": {
+      "main": [
+        [
+          {
+            "node": "Regulated Fund Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Regulated Fund Complete": {
+      "main": [
+        [
+          {
+            "node": "SEBI Fund Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "tags": [],
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionTimeout": 1800
+  }
+}

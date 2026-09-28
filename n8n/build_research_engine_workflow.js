@@ -136,7 +136,7 @@ nodes.push(
   sticky(
     'SETUP - READ FIRST',
     [-1180, -620],
-    '## Research Engine — import setup\n\n1. Open **Research Request and Limits** and replace the three `REPLACE_...` values.\n2. If any credential is red, re-select your existing credential once:\n   - `supabase`\n   - `openai`\n   - `bearer auth for tavily`\n   - `firecrawl` (Header Auth containing `Authorization: Bearer ...`)\n3. Keep the workflow inactive. Run manually with limits `3 queries / 10 candidates / 5 evidence items`.\n4. Confirm rows in `research_runs`, `sources`, `research_run_sources`, `evidence`, and `llm_usage`.\n5. Do not add a schedule until the review-only output passes evaluation.',
+    '## Research Engine — import setup\n\n1. Open **Research Request and Limits** and replace the three `REPLACE_...` values.\n2. If any credential is red, re-select your existing credential once:\n   - `supabase`\n   - `openai`\n   - `bearer auth for tavily`\n   - `firecrawl`\n3. Run the manual path once with limits `3 queries / 10 candidates / 5 evidence items`.\n4. Confirm rows in `research_runs`, `sources`, `research_run_sources`, `evidence`, and `llm_usage`.\n5. Shared scheduling is handled only by **RE 01 Shared Domain Scheduler**, which enters through **Scheduled Run Trigger** and reuses the queued run ID.',
     760,
     430,
     4,
@@ -153,6 +153,13 @@ nodes.push(
 
 nodes.push(
   baseNode('Manual Trigger', 'n8n-nodes-base.manualTrigger', 1, [-1120, 0], {}),
+  baseNode(
+    'Scheduled Run Trigger',
+    'n8n-nodes-base.executeWorkflowTrigger',
+    1.1,
+    [-1120, 220],
+    { inputSource: 'passthrough' },
+  ),
 );
 
 nodes.push(
@@ -171,7 +178,7 @@ return [{
       supabase_url: 'https://REPLACE_PROJECT_REF.supabase.co',
       workspace_id: 'REPLACE_WITH_WORKSPACE_UUID',
       workspace_domain_id: 'REPLACE_WITH_WORKSPACE_DOMAIN_UUID',
-      domain_key: 'artificial-intelligence',
+      domain_key: 'core-ai-it-infrastructure',
       topic: 'AI agents, model infrastructure, funding, product launches, safety and regulation',
       objective: 'Find material, current, source-grounded developments that may become evidence for intelligence analysis.',
       geographies: [],
@@ -218,6 +225,85 @@ return [{
 
 nodes.push(
   codeNode(
+    'Prepare Scheduled Research Request',
+    [-900, 220],
+    String.raw`// Input is supplied only by RE 01 Shared Domain Scheduler.
+// The scheduler has already created the queued research_runs row.
+
+const input = $input.first().json;
+const profile = input.domain_default_config ?? {};
+const schedule = input.schedule_config ?? {};
+const now = new Date();
+const from = new Date(now.getTime() - 14 * 60 * 60 * 1000);
+
+const topics = Array.isArray(profile.topics) ? profile.topics : [];
+const queryFocus = Array.isArray(profile.query_focus) ? profile.query_focus : [];
+const geographies = Array.isArray(profile.geographies) ? profile.geographies : ['global'];
+
+return [{
+  json: {
+    existing_research_run: true,
+    research_run_id: input.research_run_id,
+    request_id: input.request_id,
+    schedule_metadata: {
+      domain_id: input.domain_id,
+      slot_start: input.slot_start,
+      subscriber_count: input.subscriber_count,
+      profile_version: profile.profile_version ?? '1.0.0',
+      domain_config_version: input.domain_config_version ?? 1
+    },
+    config: {
+      supabase_url: input.supabase_url,
+      workspace_id: input.workspace_id ?? input.collector_workspace_id,
+      workspace_domain_id: input.workspace_domain_id ?? input.collector_workspace_domain_id,
+      domain_key: input.domain_key,
+      topic: [input.domain_name, input.domain_description, ...topics].filter(Boolean).join('; '),
+      objective: queryFocus.length
+        ? 'Find current, primary-source developments for: ' + queryFocus.join('; ') + '. Emphasize capital flows, adoption, measurable outcomes, and material risks.'
+        : 'Find current, source-grounded developments, capital flows, adoption signals, and material risks for this domain.',
+      geographies,
+      entities: [],
+      preferred_domains: Array.isArray(schedule.preferred_domains) ? schedule.preferred_domains : [],
+      blocked_domains: Array.isArray(schedule.blocked_domains)
+        ? schedule.blocked_domains
+        : ['pinterest.com', 'quora.com', 'medium.com'],
+      date_from: from.toISOString(),
+      date_to: now.toISOString(),
+      automation_mode: 'review_only',
+      query_model: schedule.query_model ?? 'gpt-6-luna',
+      evidence_model: schedule.evidence_model ?? 'gpt-6-luna',
+      prompt_version: 'research-evidence-v1.0.0',
+      query_prompt_version: 'research-query-plan-v1.0.0',
+      contract_version: '1.0.0',
+      engine_version: input.engine_version ?? 'research-engine-v1.0.0',
+      limits: {
+        max_queries: schedule.max_queries ?? 3,
+        results_per_query: schedule.results_per_query ?? 5,
+        max_candidates: schedule.max_candidates ?? 10,
+        max_source_chars: schedule.max_source_chars ?? 24000,
+        min_content_chars: schedule.min_content_chars ?? 700,
+        max_evidence_per_source: schedule.max_evidence_per_source ?? 5,
+        max_openai_output_tokens: schedule.max_openai_output_tokens ?? 1600,
+        max_estimated_openai_cost_usd: schedule.max_estimated_openai_cost_usd ?? 0.10
+      },
+      thresholds: {
+        min_relevance: schedule.min_relevance ?? 0.45,
+        min_source_quality: schedule.min_source_quality ?? 0.40,
+        min_evidence_confidence: schedule.min_evidence_confidence ?? 0.55
+      },
+      pricing_per_million_tokens: {
+        input: 0.10,
+        output: 0.50
+      }
+    }
+  },
+  pairedItem: { item: 0 }
+}];`,
+  ),
+);
+
+nodes.push(
+  codeNode(
     'Validate and Prepare Run',
     [-660, 0],
     String.raw`const input = $input.first().json;
@@ -249,14 +335,23 @@ if (config.automation_mode !== 'review_only') {
 }
 
 config.supabase_url = config.supabase_url.replace(/\/$/, '');
+config.limits = config.limits ?? {};
+config.thresholds = config.thresholds ?? {};
+config.pricing_per_million_tokens = config.pricing_per_million_tokens ?? {};
 config.limits.max_queries = Math.max(1, Math.min(5, Number(config.limits.max_queries || 3)));
 config.limits.results_per_query = Math.max(1, Math.min(10, Number(config.limits.results_per_query || 5)));
 config.limits.max_candidates = Math.max(1, Math.min(20, Number(config.limits.max_candidates || 10)));
 config.limits.max_evidence_per_source = Math.max(1, Math.min(8, Number(config.limits.max_evidence_per_source || 5)));
 config.limits.max_source_chars = Math.max(4000, Math.min(50000, Number(config.limits.max_source_chars || 24000)));
 
-const research_run_id = uuid();
-const request_id = uuid();
+const run_already_created = input.existing_research_run === true;
+const research_run_id = run_already_created ? input.research_run_id : uuid();
+const request_id = run_already_created ? input.request_id : uuid();
+
+if (!uuidPattern.test(research_run_id) || !uuidPattern.test(request_id)) {
+  throw new Error('INVALID_RESEARCH_RUN_OR_REQUEST_UUID');
+}
+
 const created_at = new Date().toISOString();
 
 return [{
@@ -264,12 +359,14 @@ return [{
     config,
     research_run_id,
     request_id,
+    run_already_created,
+    schedule_metadata: input.schedule_metadata ?? null,
     created_at,
     run_payload: {
       id: research_run_id,
       workspace_id: config.workspace_id,
       workspace_domain_id: config.workspace_domain_id,
-      trigger_type: 'manual',
+      trigger_type: run_already_created ? 'schedule' : 'manual',
       status: 'queued',
       request_id,
       idempotency_key: 'n8n:' + research_run_id,
@@ -277,7 +374,7 @@ return [{
       config_snapshot: config,
       metrics: {
         engine_version: config.engine_version,
-        started_from: 'n8n-manual-import-v1'
+        started_from: run_already_created ? 'shared-domain-scheduler-v1' : 'n8n-manual-import-v1'
       },
       error_summary: {}
     }
@@ -287,15 +384,16 @@ return [{
 );
 
 nodes.push(
+  ifNode('Run Already Queued?', [-410, 0], '={{ $json.run_already_created === true }}'),
   supabasePost(
     'Create Research Run',
-    [-410, 0],
+    [-160, 100],
     "={{ $('Validate and Prepare Run').item.json.config.supabase_url + '/rest/v1/research_runs' }}",
     "={{ JSON.stringify($('Validate and Prepare Run').item.json.run_payload) }}",
   ),
   supabasePost(
     'Claim Research Run',
-    [-160, 0],
+    [80, 0],
     "={{ $('Validate and Prepare Run').item.json.config.supabase_url + '/rest/v1/rpc/n8n_claim_research_run' }}",
     "={{ JSON.stringify({ p_research_run_id: $('Validate and Prepare Run').item.json.research_run_id, p_request_id: $('Validate and Prepare Run').item.json.request_id }) }}",
   ),
@@ -304,7 +402,7 @@ nodes.push(
 nodes.push(
   codeNode(
     'Build Query Planner Request',
-    [80, 0],
+    [320, 0],
     String.raw`const claimed = $input.first().json;
 const seed = $('Validate and Prepare Run').first().json;
 const config = seed.config;
@@ -1478,8 +1576,12 @@ function connect(from, to, outputIndex = 0, inputIndex = 0) {
 }
 
 connect('Manual Trigger', 'Research Request and Limits');
+connect('Scheduled Run Trigger', 'Prepare Scheduled Research Request');
 connect('Research Request and Limits', 'Validate and Prepare Run');
-connect('Validate and Prepare Run', 'Create Research Run');
+connect('Prepare Scheduled Research Request', 'Validate and Prepare Run');
+connect('Validate and Prepare Run', 'Run Already Queued?');
+connect('Run Already Queued?', 'Claim Research Run', 0);
+connect('Run Already Queued?', 'Create Research Run', 1);
 connect('Create Research Run', 'Claim Research Run');
 connect('Claim Research Run', 'Build Query Planner Request');
 connect('Build Query Planner Request', 'OpenAI Query Planner');
