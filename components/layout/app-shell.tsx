@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { IntelligenceActions } from "@/components/actions/intelligence-actions";
 import { IntelligenceSearch } from "@/components/search/intelligence-search";
 import { BookOpen, ChevronDown, Compass, History, Landmark, Library, LogOut, Menu, Settings, UserRound, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const navigation = [
   { href: "/workspace", label: "Overview", icon: Compass },
@@ -31,8 +31,20 @@ function Navigation({ close }: { close?: () => void }) {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [profile, setProfile] = useState({ name: "Aman Jain", role: "Student" });
   const pathname = usePathname();
   const router = useRouter();
+  useEffect(() => {
+    const syncProfile = () => {
+      const stored = window.localStorage.getItem("ai-intelligence-profile");
+      if (!stored) return;
+      const value = JSON.parse(stored) as { name?: string; role?: string };
+      setProfile({ name: value.name || "Aman Jain", role: value.role || "Student" });
+    };
+    syncProfile();
+    window.addEventListener("ai-intelligence-profile-updated", syncProfile);
+    return () => window.removeEventListener("ai-intelligence-profile-updated", syncProfile);
+  }, []);
   const logout = () => {
     window.localStorage.removeItem("ai-intelligence-demo-session");
     router.push("/login");
@@ -46,7 +58,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <Navigation />
       <div className="mt-auto border-t border-line pt-5">
         <Link href="/settings" className={`nav-link ${pathname.startsWith("/settings") ? "nav-link-active" : ""}`}><Settings size={16} />Settings</Link>
-        <div className="mt-5 flex items-center gap-3 px-3"><span className="grid h-8 w-8 place-items-center rounded-full bg-teal font-mono text-xs font-semibold text-white">AJ</span><div><p className="text-xs font-semibold">Aman Jain</p><p className="meta mt-0.5">Personal workspace</p></div></div>
+        <Link href="/profile" className="mt-5 flex items-center gap-3 rounded-md px-3 py-1 transition hover:bg-[#18214a]"><span className="grid h-8 w-8 place-items-center rounded-full bg-teal font-mono text-xs font-semibold text-white">{profile.name.charAt(0).toUpperCase()}</span><div><p className="text-xs font-semibold">{profile.name}</p><p className="meta mt-0.5">{profile.role} · Profile</p></div></Link>
         <button className="nav-link mt-3 w-full text-[#d9a9c8] hover:bg-[#30162b]" type="button" onClick={logout}><LogOut size={16} />Log out</button>
       </div>
     </aside>

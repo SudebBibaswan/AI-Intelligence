@@ -16,7 +16,7 @@ export function UserProfile() {
   const [draft, setDraft] = useState<Profile>(defaults);
   const [editing, setEditing] = useState(false);
   useEffect(() => { const stored = window.localStorage.getItem(profileKey); if (stored) { const value = JSON.parse(stored) as Profile; setProfile(value); setDraft(value); } const sync = () => setPersonal(readPersonalization()); sync(); window.addEventListener(personalizationEventName, sync); return () => window.removeEventListener(personalizationEventName, sync); }, []);
-  const save = () => { setProfile(draft); window.localStorage.setItem(profileKey, JSON.stringify(draft)); setEditing(false); };
+  const save = () => { setProfile(draft); window.localStorage.setItem(profileKey, JSON.stringify(draft)); window.dispatchEvent(new Event("ai-intelligence-profile-updated")); setEditing(false); };
   const update = <K extends keyof Profile>(key: K, value: Profile[K]) => setDraft((current) => ({ ...current, [key]: value }));
   const saved = personal.filter((item) => item.saved).length;
   const liked = personal.filter((item) => item.liked).length;
