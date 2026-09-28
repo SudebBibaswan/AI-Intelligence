@@ -1,0 +1,807 @@
+{
+  "name": "RE 02 - Stored Content Evidence Backfill",
+  "nodes": [
+    {
+      "id": "389e2289-0000-4000-8000-d747feae40b5",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        240
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "7cca2a6a-0000-4000-8000-19ca9bb1fc51",
+      "name": "Twice Daily Backfill",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 12
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e3d9703d-0000-4000-8000-1330fc65f4a2",
+      "name": "Backfill Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        320
+      ],
+      "parameters": {
+        "jsCode": "const uuid = () => {\n  const h = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16));\n  h[12] = '4'; h[16] = (8 + Math.floor(Math.random() * 4)).toString(16);\n  return h.slice(0,8).join('') + '-' + h.slice(8,12).join('') + '-' + h.slice(12,16).join('') + '-' + h.slice(16,20).join('') + '-' + h.slice(20).join('');\n};\nconst research_run_id = uuid();\nconst request_id = uuid();\nconst config = {\n  supabase_url: 'https://jaeltkzfjgrzgxgzxlfs.supabase.co',\n  workspace_id: 'a51b8277-4cd5-4f8a-9ffd-4ddbe56683da',\n  workspace_domain_id: '11068f00-2e6b-462c-b455-c69384e5e8a8',\n  domain_key: 'maintenance-backfill', objective: 'Extract grounded evidence from previously stored research content.',\n  automation_mode: 'review_only', contract_version: '1.0.0', engine_version: 'research-backfill-v1.0.0',\n  evidence_model: 'gpt-6-luna', prompt_version: 'research-evidence-v1.0.0',\n  limits: { batch_size: 20, max_source_chars: 24000, max_evidence_per_source: 5, max_openai_output_tokens: 1600, max_estimated_openai_cost_usd: 0.10 },\n  thresholds: { min_evidence_confidence: 0.55 }, pricing_per_million_tokens: { input: 0.1, output: 0.5 }\n};\nreturn [{ json: { config, research_run_id, request_id, run_payload: {\n  id: research_run_id, workspace_id: config.workspace_id, workspace_domain_id: config.workspace_domain_id,\n  trigger_type: 'schedule', status: 'queued', request_id, idempotency_key: 'backfill:' + research_run_id,\n  contract_version: config.contract_version, config_snapshot: config,\n  metrics: { engine_version: config.engine_version, started_from: 'stored-content-backfill' }, error_summary: {}\n} } }];"
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Backfill Configuration').item.json.config.supabase_url + '/rest/v1/research_runs' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Backfill Configuration').item.json.run_payload) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "ff75331c-0000-4000-8000-8bc44e5ca1fa",
+      "name": "Create Backfill Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        320
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Backfill Configuration').item.json.config.supabase_url + '/rest/v1/rpc/n8n_claim_research_run' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_research_run_id: $('Backfill Configuration').item.json.research_run_id, p_request_id: $('Backfill Configuration').item.json.request_id }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "7f645be2-0000-4000-8000-a25949becf35",
+      "name": "Claim Backfill Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        760,
+        320
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "id": "600330e0-0000-4000-8000-908105983637",
+      "name": "List Stored Sources Needing Evidence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        320
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Backfill Configuration').item.json.config.supabase_url + '/rest/v1/rpc/n8n_list_evidence_backfill_sources' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_workspace_id: $('Backfill Configuration').item.json.config.workspace_id, p_limit: $('Backfill Configuration').item.json.config.limits.batch_size }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "id": "5875c434-0000-4000-8000-aa3477d18bbb",
+      "name": "Normalize Backfill Queue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        320
+      ],
+      "parameters": {
+        "jsCode": "const seed = $('Backfill Configuration').first().json;\nconst rows = $input.all().flatMap((item) => Array.isArray(item.json) ? item.json : [item.json]).filter((row) => row?.source_id);\nreturn rows.map((row) => ({ json: { ...row, config: seed.config, research_run_id: seed.research_run_id, request_id: seed.request_id,\n  workspace_id: seed.config.workspace_id, workspace_domain_id: seed.config.workspace_domain_id,\n  source_persisted: true, source_decision: 'needs_review', content_status: 'success' } }));"
+      }
+    },
+    {
+      "id": "d1a03d8e-0000-4000-8000-962986a53dab",
+      "name": "Stored Source Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1480,
+        320
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "299d7907-0000-4000-8000-bdd2282becd2",
+      "name": "Download Stored Content",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1720,
+        440
+      ],
+      "parameters": {
+        "url": "={{ $json.config.supabase_url + '/storage/v1/object/authenticated/research-content/' + $json.content_storage_path }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "responseFormat": "text",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "id": "137b7c79-0000-4000-8000-dde6b06c47a4",
+      "name": "Restore Stored Source Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1960,
+        440
+      ],
+      "parameters": {
+        "jsCode": "const source = $('Stored Source Loop').item.json;\nconst response = $input.first().json ?? {};\nconst content = String(response.data ?? response.body ?? '').slice(0, source.config.limits.max_source_chars).trim();\nreturn [{ json: { ...source, content_text: content, content_status: content.length >= 700 ? 'success' : 'partial' } }];"
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $input.first().json;\nconst config = source.config;\n\nconst schema = {\n  type: 'object',\n  additionalProperties: false,\n  properties: {\n    items: {\n      type: 'array',\n      minItems: 0,\n      maxItems: config.limits.max_evidence_per_source,\n      items: {\n        type: 'object',\n        additionalProperties: false,\n        properties: {\n          evidence_type: { type: 'string', enum: ['fact', 'quote', 'metric', 'event', 'claim', 'counter_claim'] },\n          claim_text: { type: 'string' },\n          excerpt: { type: 'string' },\n          locator: {\n            type: 'object',\n            additionalProperties: false,\n            properties: {\n              section: { type: 'string' },\n              paragraph: { type: 'integer' }\n            },\n            required: ['section', 'paragraph']\n          },\n          polarity: { type: 'string', enum: ['supports', 'contradicts', 'neutral'] },\n          confidence: { type: 'number', minimum: 0, maximum: 1 }\n        },\n        required: ['evidence_type', 'claim_text', 'excerpt', 'locator', 'polarity', 'confidence']\n      }\n    }\n  },\n  required: ['items']\n};\n\nconst sourceInput = {\n  title: source.title,\n  canonical_url: source.canonical_url,\n  publisher: source.publisher,\n  published_at: source.published_at,\n  research_objective: config.objective,\n  maximum_items: config.limits.max_evidence_per_source,\n  source_text: source.content_text\n};\n\nreturn [{\n  json: {\n    ...source,\n    openai_request: {\n      model: config.evidence_model,\n      instructions: 'Extract only decision-useful evidence explicitly supported by the supplied source. Every excerpt must be copied from the supplied source text, with no paraphrasing inside excerpt. Claims must be concise normalized propositions. Do not use outside knowledge. Do not infer missing dates, actors, amounts, or causality. Return an empty items array when the source contains no suitable evidence.',\n      input: [{\n        role: 'user',\n        content: [{ type: 'input_text', text: JSON.stringify(sourceInput) }]\n      }],\n      text: {\n        format: {\n          type: 'json_schema',\n          name: 'research_evidence_items',\n          strict: true,\n          schema\n        }\n      },\n      max_output_tokens: config.limits.max_openai_output_tokens,\n      store: false\n    }\n  }\n}];"
+      },
+      "id": "f6f06222-0000-4000-8000-1f71a8262bbe",
+      "name": "Build Evidence Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2440,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.openai_request) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "2ed68a85-0000-4000-8000-bc2dc98e9c22",
+      "name": "OpenAI Evidence Extraction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2464,
+        440
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1800,
+      "alwaysOutputData": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "7a0hdZ68ejgk6EnD",
+          "name": "OpenAI account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json ?? {};\nconst source = $('Build Evidence Request').item.json;\nconst config = source.config;\nconst crypto = require('crypto');\n\nconst uuid = () => {\n  const b = crypto.randomBytes(16);\n  b[6] = (b[6] & 0x0f) | 0x40;\n  b[8] = (b[8] & 0x3f) | 0x80;\n  const h = b.toString('hex');\n  return h.slice(0,8) + '-' + h.slice(8,12) + '-' + h.slice(12,16) + '-' + h.slice(16,20) + '-' + h.slice(20);\n};\n\nconst outputText = (response.output ?? [])\n  .flatMap((item) => item.content ?? [])\n  .find((content) => content.type === 'output_text')?.text;\n\nlet parsed = null;\nlet modelError = null;\ntry {\n  parsed = outputText ? JSON.parse(outputText) : null;\n} catch {\n  modelError = 'EVIDENCE_OUTPUT_INVALID_JSON';\n}\nif (!Array.isArray(parsed?.items)) modelError = modelError || 'EVIDENCE_OUTPUT_MISSING';\n\nconst normalizeWhitespace = (value) => String(value ?? '').replace(/\\s+/g, ' ').trim();\nconst normalizedSource = normalizeWhitespace(source.content_text);\nconst allowedTypes = new Set(['fact', 'quote', 'metric', 'event', 'claim', 'counter_claim']);\nconst allowedPolarity = new Set(['supports', 'contradicts', 'neutral']);\nconst grounded = [];\nlet rejectedCount = 0;\n\nfor (const raw of (parsed?.items ?? []).slice(0, config.limits.max_evidence_per_source)) {\n  const excerpt = normalizeWhitespace(raw.excerpt);\n  const claim = normalizeWhitespace(raw.claim_text);\n  const confidence = Math.max(0, Math.min(1, Number(raw.confidence ?? 0)));\n  const exactGrounding = excerpt.length >= 20 && normalizedSource.includes(excerpt);\n  const structurallyValid = allowedTypes.has(raw.evidence_type) && allowedPolarity.has(raw.polarity) && claim.length >= 10 && claim.length <= 1000;\n  if (!exactGrounding || !structurallyValid || confidence < config.thresholds.min_evidence_confidence) {\n    rejectedCount++;\n    continue;\n  }\n\n  grounded.push({\n    id: uuid(),\n    workspace_id: source.workspace_id,\n    source_id: source.source_id,\n    research_run_id: source.research_run_id,\n    evidence_type: raw.evidence_type,\n    claim_text: claim,\n    excerpt,\n    locator: {\n      section: String(raw.locator?.section ?? '').slice(0, 300),\n      paragraph: Math.max(0, Number(raw.locator?.paragraph ?? 0))\n    },\n    polarity: raw.polarity,\n    confidence,\n    verification_status: 'verified',\n    extractor_version: config.prompt_version,\n    metadata: {\n      schema_version: 'evidence-v1.0.0',\n      model_request_id: response.id ?? null,\n      model: response.model ?? config.evidence_model,\n      exact_excerpt_match: true,\n      review_mode: config.automation_mode\n    }\n  });\n}\n\nconst usage = response.usage ?? {};\nconst inputTokens = Number(usage.input_tokens ?? 0);\nconst outputTokens = Number(usage.output_tokens ?? 0);\nconst estimatedCost = (inputTokens * config.pricing_per_million_tokens.input + outputTokens * config.pricing_per_million_tokens.output) / 1000000;\nif (estimatedCost > config.limits.max_estimated_openai_cost_usd) modelError = modelError || 'RUN_OPENAI_COST_CAP_EXCEEDED';\n\nreturn [{\n  json: {\n    ...source,\n    evidence_items: grounded,\n    evidence_rejected_count: rejectedCount,\n    evidence_model_error: modelError,\n    evidence_usage: {\n      workspace_id: source.workspace_id,\n      research_run_id: source.research_run_id,\n      request_id: uuid(),\n      workflow: 'RE 00 Research Engine',\n      agent: 'evidence_extractor',\n      operation: 'structured_evidence_extraction',\n      provider: 'openai',\n      model: response.model ?? config.evidence_model,\n      model_tier: 0,\n      input_tokens: inputTokens,\n      output_tokens: outputTokens,\n      estimated_cost_usd: Number(estimatedCost.toFixed(6)),\n      latency_ms: 0,\n      success: !modelError,\n      error_code: modelError,\n      prompt_version: config.prompt_version,\n      schema_version: 'evidence-v1.0.0'\n    }\n  }\n}];"
+      },
+      "id": "8f08b551-0000-4000-8000-1818b31062aa",
+      "name": "Parse and Verify Evidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2488,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Backfill Configuration').item.json.config.supabase_url + '/rest/v1/llm_usage' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Parse and Verify Evidence').item.json.evidence_usage) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "c6980934-0000-4000-8000-5526f4976868",
+      "name": "Record Evidence LLM Usage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2512,
+        440
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const parsed = $('Parse and Verify Evidence').item.json;\nif (!parsed.evidence_items.length) {\n  return [{\n    json: {\n      ...parsed,\n      has_evidence: false,\n      evidence_contract: null\n    }\n  }];\n}\n\nreturn parsed.evidence_items.map((evidence, index) => ({\n  json: {\n    candidate_id: parsed.candidate_id,\n    config: parsed.config,\n    workspace_id: parsed.workspace_id,\n    workspace_domain_id: parsed.workspace_domain_id,\n    research_run_id: parsed.research_run_id,\n    request_id: parsed.request_id,\n    source_id: parsed.source_id,\n    canonical_url: parsed.canonical_url,\n    source_decision: parsed.source_decision,\n    source_persisted: parsed.source_persisted,\n    content_status: parsed.content_status,\n    content_storage_failed: Boolean(parsed.content_storage_failed),\n    evidence_rejected_count: parsed.evidence_rejected_count,\n    evidence_model_error: parsed.evidence_model_error,\n    has_evidence: true,\n    evidence_contract: evidence\n  },\n  pairedItem: { item: 0 }\n}));"
+      },
+      "id": "adaac704-0000-4000-8000-1f0550fd112b",
+      "name": "Expand Evidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2536,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4a2c8eef-9e4a-48a8-a1c8-460a13fa1921",
+              "leftValue": "={{ Boolean($json.has_evidence) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b7201649-0000-4000-8000-b55c3358cfc3",
+      "name": "Has Grounded Evidence?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2560,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Backfill Configuration').item.json.config.supabase_url + '/rest/v1/rpc/n8n_record_research_evidence' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_evidence: $json.evidence_contract }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "6efa0e48-0000-4000-8000-bf04e674e538",
+      "name": "Persist Evidence via RPC",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2584,
+        440
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const evidence = $('Expand Evidence').item.json;\nconst persisted = $input.item.json ?? {};\nreturn {\n  json: {\n    ...evidence,\n    evidence_id: persisted.evidence_id ?? evidence.evidence_contract?.id ?? null,\n    evidence_persisted: Boolean(persisted.evidence_id),\n    evidence_is_new: Boolean(persisted.is_new)\n  }\n};"
+      },
+      "id": "96633487-0000-4000-8000-451a1191e65d",
+      "name": "Restore Evidence Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2608,
+        440
+      ]
+    },
+    {
+      "id": "10d89416-0000-4000-8000-1b2aaa57305e",
+      "name": "Evidence Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        3400,
+        440
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "f825ef17-0000-4000-8000-5e8249c73b0f",
+      "name": "Backfill Source Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3880,
+        320
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { source_id: $('Stored Source Loop').item.json.source_id, completed: true } }];"
+      }
+    },
+    {
+      "id": "b400e2a0-0000-4000-8000-962544eaeced",
+      "name": "Backfill Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1720,
+        200
+      ],
+      "parameters": {
+        "jsCode": "const seed = $('Backfill Configuration').first().json;\nreturn [{ json: { research_run_id: seed.research_run_id, request_id: seed.request_id, final_status: 'completed', metrics: { backfill_sources_processed: $input.all().length }, error_patch: {} } }];"
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Backfill Configuration').item.json.config.supabase_url + '/rest/v1/rpc/n8n_set_research_run_status' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_research_run_id: $json.research_run_id, p_request_id: $json.request_id, p_status: $json.final_status, p_metrics_patch: $json.metrics, p_error_patch: $json.error_patch }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "63345d94-0000-4000-8000-b298b3919a8b",
+      "name": "Finalize Backfill Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1960,
+        200
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Backfill Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Twice Daily Backfill": {
+      "main": [
+        [
+          {
+            "node": "Backfill Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Backfill Configuration": {
+      "main": [
+        [
+          {
+            "node": "Create Backfill Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Backfill Run": {
+      "main": [
+        [
+          {
+            "node": "Claim Backfill Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Backfill Run": {
+      "main": [
+        [
+          {
+            "node": "List Stored Sources Needing Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Stored Sources Needing Evidence": {
+      "main": [
+        [
+          {
+            "node": "Normalize Backfill Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Backfill Queue": {
+      "main": [
+        [
+          {
+            "node": "Stored Source Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stored Source Loop": {
+      "main": [
+        [
+          {
+            "node": "Backfill Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Download Stored Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Stored Content": {
+      "main": [
+        [
+          {
+            "node": "Restore Stored Source Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Stored Source Context": {
+      "main": [
+        [
+          {
+            "node": "Build Evidence Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Evidence Request": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Evidence Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Evidence Extraction": {
+      "main": [
+        [
+          {
+            "node": "Parse and Verify Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse and Verify Evidence": {
+      "main": [
+        [
+          {
+            "node": "Record Evidence LLM Usage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Evidence LLM Usage": {
+      "main": [
+        [
+          {
+            "node": "Expand Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand Evidence": {
+      "main": [
+        [
+          {
+            "node": "Evidence Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evidence Loop": {
+      "main": [
+        [
+          {
+            "node": "Backfill Source Complete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Grounded Evidence?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Grounded Evidence?": {
+      "main": [
+        [
+          {
+            "node": "Persist Evidence via RPC",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Evidence Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Evidence via RPC": {
+      "main": [
+        [
+          {
+            "node": "Restore Evidence Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Evidence Context": {
+      "main": [
+        [
+          {
+            "node": "Evidence Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Backfill Source Complete": {
+      "main": [
+        [
+          {
+            "node": "Stored Source Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Backfill Summary": {
+      "main": [
+        [
+          {
+            "node": "Finalize Backfill Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "tags": []
+}

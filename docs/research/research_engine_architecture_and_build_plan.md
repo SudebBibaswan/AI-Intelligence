@@ -494,7 +494,9 @@ The architecture can proceed now, but the hands-on n8n guide must label these va
 
 ## Definition of ready for the n8n hands-on guide
 
-The guide can be written and executed when:
+The guide may be written and the development workflow may be constructed immediately. Manual provider-backed executions must remain tightly capped and `review_only`; they do not approve a provider, model, threshold, or automatic decision.
+
+Promotion to automatic acceptance or unattended scheduling requires:
 
 - Adapter inputs and outputs are accepted.
 - The initial three discovery channels are named.
@@ -504,7 +506,7 @@ The guide can be written and executed when:
 - Required database operational tables or equivalent functions are agreed.
 - Per-run limits and fallback order are configured.
 
-At that point, the guide should implement `RE 00` through `RE 50` first, test the complete source pipeline, and only then add model-based evidence extraction.
+The build guide implements `RE 00` through `RE 50` first, tests the complete source pipeline, and only then adds model-based evidence extraction. See [How to Build the First n8n Research Agent](../operations/how_to_build_first_n8n_research_agent.md).
 
 ## Provider references
 

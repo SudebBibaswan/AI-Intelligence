@@ -23,6 +23,7 @@ Resolve a conflict by updating all affected documents in the same pull request. 
 | [MVP Scope and Acceptance Criteria](product/mvp_scope_and_acceptance.md) | Product, design, engineering | What the first usable release includes |
 | [Product Vocabulary](product/product_vocabulary.md) | Entire team | Exact meanings of intelligence terms |
 | [System Architecture](architecture/system_architecture.md) | Backend, AI, frontend | Service boundaries and data flow |
+| [Shared Domain Collection and Personalization](architecture/shared_domain_collection_and_personalization.md) | Product, backend, AI, n8n, frontend | Twice-daily shared research, seven-domain scope, corpus reuse, and explainable multi-factor feed ranking |
 | [Database Schema](architecture/database_schema.md) | Backend, frontend, n8n | Canonical tables, keys, states, and lineage |
 | [Supabase Setup and Connection](architecture/supabase_setup_and_connection.md) | Backend, frontend, n8n | Apply migrations, verify RLS, and connect each component with the correct key |
 | [API and Frontend Data Contracts](architecture/api_and_frontend_contracts.md) | Frontend, backend | Stable read and write interfaces |
@@ -38,6 +39,8 @@ Resolve a conflict by updating all affected documents in the same pull request. 
 | [Research Generalization and Department Readiness](research/research_engine_generalization_and_department_readiness.md) | AI, product, department leads | What is reusable and what each department must validate independently |
 | [Research Engine Workflow](research/research_engine_workflow.md) | AI, n8n, backend | Node boundaries, retries, and handoffs |
 | [n8n Provider Credential Setup](operations/how_to_configure_n8n_provider_credentials.md) | AI, n8n, security | Secure Tavily, Exa, Firecrawl, and OpenAI development credentials |
+| [Supabase Migration Workflow](operations/how_to_apply_supabase_migrations.md) | Backend, AI, operations | Create, test, deploy, verify, and repair migrations without SQL-editor drift |
+| [Shared Domain Scheduler Setup](operations/how_to_configure_shared_domain_scheduler.md) | AI, n8n, backend | Bootstrap the hidden collector workspace and queue two reusable runs per active domain each day |
 | [First n8n Research Agent Build Guide](operations/how_to_build_first_n8n_research_agent.md) | AI, n8n, backend | Build the manual review-only Research Engine from run claim through evidence persistence |
 | [Parallel Delivery Plan](team/parallel_delivery_plan.md) | Entire team | Workstreams, dependencies, and integration gates |
 | [Architecture Decisions](decisions/README.md) | Entire team | Accepted cross-team technical decisions |

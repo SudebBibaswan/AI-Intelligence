@@ -1,0 +1,469 @@
+{
+  "name": "RE 04 - Capital Directory Refresh",
+  "nodes": [
+    {
+      "id": "389e2289-0000-4000-8000-d468455c1e63",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        240
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "642fa117-0000-4000-8000-e254e00da615",
+      "name": "Every Four Weeks",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 4
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c49e0d71-0000-4000-8000-9c3d201ce543",
+      "name": "Directory Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: {\n  supabase_url: 'https://jaeltkzfjgrzgxgzxlfs.supabase.co',\n  workspace_id: 'a51b8277-4cd5-4f8a-9ffd-4ddbe56683da',\n  countries: [{ name: 'India', wikidata_qid: 'Q668' }],\n  entity_classes: [\n    { entity_type: 'investor', name: 'venture capital firm', wikidata_qid: 'Q3487908' },\n    { entity_type: 'accelerator', name: 'startup accelerator', wikidata_qid: 'Q4086495' }\n  ],\n  max_results_per_class: 150,\n  registry_version: 'capital-directory-v1.0.0'\n} }];"
+      }
+    },
+    {
+      "id": "dac02666-0000-4000-8000-809927ebe669",
+      "name": "Build Wikidata Registry Jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const config = $input.first().json;\nconst safeQid = (value) => /^Q[1-9][0-9]*$/.test(String(value ?? '')) ? String(value) : null;\nconst limit = Math.max(1, Math.min(250, Number(config.max_results_per_class ?? 100)));\nconst jobs = [];\nfor (const country of (config.countries ?? [])) {\n  const countryQid = safeQid(country.wikidata_qid);\n  if (!countryQid) continue;\n  for (const entityClass of (config.entity_classes ?? [])) {\n    const classQid = safeQid(entityClass.wikidata_qid);\n    if (!classQid || !['investor', 'accelerator'].includes(entityClass.entity_type)) continue;\n    const sparql = [\n      'SELECT DISTINCT ?entity ?entityLabel ?website ?inception ?headquartersLabel WHERE {',\n      '  ?entity wdt:P31/wdt:P279* wd:' + classQid + ' .',\n      '  { ?entity wdt:P17 wd:' + countryQid + ' . }',\n      '  UNION',\n      '  { ?entity wdt:P159 ?headquarters . ?headquarters wdt:P17 wd:' + countryQid + ' . }',\n      '  OPTIONAL { ?entity wdt:P856 ?website . }',\n      '  OPTIONAL { ?entity wdt:P571 ?inception . }',\n      '  OPTIONAL { ?entity wdt:P159 ?headquarters . }',\n      '  SERVICE wikibase:label { bd:serviceParam wikibase:language \"en\". }',\n      '}',\n      'LIMIT ' + limit\n    ].join('\\n');\n    jobs.push({\n      config,\n      country_name: String(country.name ?? countryQid),\n      country_qid: countryQid,\n      entity_type: entityClass.entity_type,\n      class_name: String(entityClass.name ?? classQid),\n      class_qid: classQid,\n      sparql\n    });\n  }\n}\nif (!jobs.length) throw new Error('NO_VALID_CAPITAL_DIRECTORY_JOBS');\nreturn jobs.map((job) => ({ json: job }));"
+      }
+    },
+    {
+      "id": "37c5951d-0000-4000-8000-3447b2b10bf2",
+      "name": "Registry Job Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        720,
+        320
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "31919695-0000-4000-8000-2371eaae4aaf",
+      "name": "Wikidata SPARQL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        440
+      ],
+      "parameters": {
+        "url": "https://query.wikidata.org/sparql",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/sparql-results+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "AI-Intelligence-Research/1.0 (https://github.com/dbakshatjain23-ux/AI-Intelligence)"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.sparql }}"
+            },
+            {
+              "name": "format",
+              "value": "json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 60000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "c6af8499-0000-4000-8000-6ba94b2a8da6",
+      "name": "Normalize Wikidata Candidates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        440
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const job = $('Registry Job Loop').item.json;\nconst response = $input.first().json ?? {};\nconst bindings = Array.isArray(response.results?.bindings) ? response.results.bindings : [];\nconst clean = (value, max = 500) => String(value ?? '').replace(/\\s+/g, ' ').trim().slice(0, max);\nconst candidates = [];\nconst seen = new Set();\nfor (const row of bindings) {\n  const wikidataUrl = clean(row.entity?.value, 1000);\n  const qid = wikidataUrl.match(/\\/(Q[1-9][0-9]*)$/)?.[1];\n  const name = clean(row.entityLabel?.value);\n  if (!qid || !name || name === qid || seen.has(qid)) continue;\n  seen.add(qid);\n  const website = clean(row.website?.value, 1000);\n  const inception = clean(row.inception?.value, 100);\n  candidates.push({\n    registry_candidate: true,\n    provider: 'wikidata',\n    p_entity: {\n      workspace_id: job.config.workspace_id,\n      entity_type: job.entity_type,\n      name,\n      canonical_url: /^https?:\\/\\//i.test(website) ? website : wikidataUrl,\n      external_ids: { wikidata_qid: qid },\n      attributes: {\n        registry_source: 'wikidata',\n        registry_status: 'candidate_unverified',\n        registry_version: job.config.registry_version,\n        registry_country: job.country_name,\n        registry_country_qid: job.country_qid,\n        registry_class: job.class_name,\n        registry_class_qid: job.class_qid,\n        registry_last_seen_at: new Date().toISOString(),\n        ...(inception ? { inception } : {}),\n        ...(clean(row.headquartersLabel?.value) ? { headquarters: clean(row.headquartersLabel.value) } : {})\n      }\n    }\n  });\n}\nif (!candidates.length) {\n  return [{ json: {\n    registry_candidate: false,\n    provider: 'wikidata',\n    provider_error: response.error ? 'WIKIDATA_REQUEST_FAILED' : 'NO_WIKIDATA_RESULTS',\n    country_name: job.country_name,\n    entity_type: job.entity_type\n  } }];\n}\nreturn candidates.map((candidate) => ({ json: candidate }));"
+      }
+    },
+    {
+      "id": "862afdaa-0000-4000-8000-1e534d18929d",
+      "name": "Registry Candidate Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1440,
+        440
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "08ea5cb4-0000-4000-8000-e32ae3d96661",
+      "name": "Is Registry Candidate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1680,
+        560
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "600a43a8-0000-4000-8000-6136f7007535",
+              "leftValue": "={{ $json.registry_candidate }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "25056927-0000-4000-8000-8c23ae8f0a02",
+      "name": "Upsert Directory Entity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        480
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Directory Configuration').item.json.supabase_url + '/rest/v1/rpc/n8n_upsert_research_entity' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_entity: $json.p_entity }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "7cc0734f-0000-4000-8000-5934cfbde594",
+      "name": "Directory Candidate Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        480
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const candidate = $('Is Registry Candidate?').item.json;\nconst response = $input.first().json ?? {};\nconst result = Array.isArray(response) ? (response[0] ?? {}) : response;\nreturn [{ json: {\n  completed: true,\n  provider: candidate.provider,\n  entity_id: result.entity_id ?? null,\n  entity_type: result.entity_type ?? candidate.p_entity?.entity_type ?? null,\n  wikidata_qid: candidate.p_entity?.external_ids?.wikidata_qid ?? null\n} }];"
+      }
+    },
+    {
+      "id": "a6a04a0f-0000-4000-8000-609708035c35",
+      "name": "Skipped Directory Candidate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        680
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return $input.all().map((item) => ({ json: {\n  completed: false,\n  skipped: true,\n  provider: item.json.provider ?? 'wikidata',\n  provider_error: item.json.provider_error ?? 'INVALID_REGISTRY_CANDIDATE'\n} }));"
+      }
+    },
+    {
+      "id": "44b36680-0000-4000-8000-03349e9e31f3",
+      "name": "Directory Job Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        280
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map((item) => item.json ?? {});\nreturn [{ json: {\n  completed: true,\n  candidates_upserted: rows.filter((row) => row.completed === true).length,\n  candidates_skipped: rows.filter((row) => row.skipped === true).length,\n  provider_errors: [...new Set(rows.map((row) => row.provider_error).filter(Boolean))]\n} }];"
+      }
+    },
+    {
+      "id": "42b417d3-0000-4000-8000-460c8a2aef26",
+      "name": "Capital Directory Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        160
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map((item) => item.json ?? {});\nconst providerErrors = [...new Set(rows.flatMap((row) => row.provider_errors ?? []).filter(Boolean))];\nreturn [{ json: {\n  status: providerErrors.length && rows.every((row) => Number(row.candidates_upserted ?? 0) === 0) ? 'failed' : (providerErrors.length ? 'partial' : 'completed'),\n  registry_jobs_processed: rows.length,\n  candidates_upserted: rows.reduce((sum, row) => sum + Number(row.candidates_upserted ?? 0), 0),\n  candidates_skipped: rows.reduce((sum, row) => sum + Number(row.candidates_skipped ?? 0), 0),\n  provider_errors: providerErrors,\n  activity_claims_created: 0,\n  note: 'Directory entries remain candidate_unverified until supported by recent grounded capital evidence.'\n} }];"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Directory Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every Four Weeks": {
+      "main": [
+        [
+          {
+            "node": "Directory Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Directory Configuration": {
+      "main": [
+        [
+          {
+            "node": "Build Wikidata Registry Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Wikidata Registry Jobs": {
+      "main": [
+        [
+          {
+            "node": "Registry Job Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registry Job Loop": {
+      "main": [
+        [
+          {
+            "node": "Capital Directory Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wikidata SPARQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wikidata SPARQL": {
+      "main": [
+        [
+          {
+            "node": "Normalize Wikidata Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Wikidata Candidates": {
+      "main": [
+        [
+          {
+            "node": "Registry Candidate Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registry Candidate Loop": {
+      "main": [
+        [
+          {
+            "node": "Directory Job Complete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Registry Candidate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Registry Candidate?": {
+      "main": [
+        [
+          {
+            "node": "Upsert Directory Entity",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skipped Directory Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Directory Entity": {
+      "main": [
+        [
+          {
+            "node": "Directory Candidate Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Directory Candidate Complete": {
+      "main": [
+        [
+          {
+            "node": "Registry Candidate Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skipped Directory Candidate": {
+      "main": [
+        [
+          {
+            "node": "Registry Candidate Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Directory Job Complete": {
+      "main": [
+        [
+          {
+            "node": "Registry Job Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "tags": [],
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionTimeout": 1800
+  }
+}

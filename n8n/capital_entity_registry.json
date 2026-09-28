@@ -1,0 +1,396 @@
+{
+  "name": "RE 03 - Capital and Entity Registry",
+  "nodes": [
+    {
+      "id": "389e2289-0000-4000-8000-d747feae40b5",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        240
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "60b2b894-0000-4000-8000-36e638caf4d3",
+      "name": "Daily Capital Registry",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f25bdf14-0000-4000-8000-24ef1fb2e387",
+      "name": "Registry Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        320
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: {\n  supabase_url: 'https://jaeltkzfjgrzgxgzxlfs.supabase.co', workspace_id: 'a51b8277-4cd5-4f8a-9ffd-4ddbe56683da',\n  model: 'gpt-6-luna', batch_size: 40, min_confidence: 0.55\n} }];"
+      }
+    },
+    {
+      "id": "163dda67-0000-4000-8000-4c5e0b4df97e",
+      "name": "Load Grounded Evidence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        320
+      ],
+      "parameters": {
+        "url": "={{ $('Registry Configuration').item.json.supabase_url + '/rest/v1/evidence' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "select",
+              "value": "id,workspace_id,source_id,evidence_type,claim_text,excerpt,confidence,verification_status,created_at"
+            },
+            {
+              "name": "workspace_id",
+              "value": "=eq.{{ $('Registry Configuration').item.json.workspace_id }}"
+            },
+            {
+              "name": "verification_status",
+              "value": "in.(verified,unverified)"
+            },
+            {
+              "name": "order",
+              "value": "created_at.desc"
+            },
+            {
+              "name": "limit",
+              "value": "={{ $('Registry Configuration').item.json.batch_size }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "id": "6558381d-0000-4000-8000-d4e29942c856",
+      "name": "Normalize Evidence Queue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        320
+      ],
+      "parameters": {
+        "jsCode": "const config = $('Registry Configuration').first().json;\nreturn $input.all().flatMap((item) => Array.isArray(item.json) ? item.json : [item.json])\n  .filter((row) => row?.id && Number(row.confidence) >= config.min_confidence)\n  .map((row) => ({ json: { ...row, config } }));"
+      }
+    },
+    {
+      "id": "0234f0c8-0000-4000-8000-71fbf3531f66",
+      "name": "Evidence Graph Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        960,
+        320
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "a22b06e1-0000-4000-8000-c66f0b77b282",
+      "name": "Build Capital Graph Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        440
+      ],
+      "parameters": {
+        "jsCode": "const evidence = $input.first().json;\nconst attribute = { type: 'object', additionalProperties: false, properties: {\n  key: { type: 'string' }, value: { type: 'string' }\n}, required: ['key','value'] };\nconst entity = { type: 'object', additionalProperties: false, properties: {\n  entity_type: { type: 'string', enum: ['company','investor','fund','accelerator','person'] },\n  name: { type: 'string' }, canonical_url: { type: 'string' }, role: { type: 'string' }, confidence: { type: 'number' },\n  attributes: { type: 'array', maxItems: 16, items: attribute }\n}, required: ['entity_type','name','canonical_url','role','confidence','attributes'] };\nconst relationship = { type: 'object', additionalProperties: false, properties: {\n  from_entity: entity, to_entity: entity,\n  relationship_type: { type: 'string', enum: ['invested_in','founded','partnered_with','acquired'] },\n  valid_from: { type: 'string' }, confidence: { type: 'number' }, attributes: { type: 'array', maxItems: 16, items: attribute }\n}, required: ['from_entity','to_entity','relationship_type','valid_from','confidence','attributes'] };\nconst schema = { type: 'object', additionalProperties: false, properties: {\n  entities: { type: 'array', maxItems: 12, items: entity }, relationships: { type: 'array', maxItems: 8, items: relationship }\n}, required: ['entities','relationships'] };\nreturn [{ json: { ...evidence, openai_request: { model: evidence.config.model, store: false, max_output_tokens: 1800,\n  instructions: 'Build a capital graph using only explicitly named companies, investors, funds, accelerators, and people. A named entity must be a proper name appearing verbatim in the claim or exact excerpt. Never create entities from generic concepts, categories, report titles, article titles, metrics, financing types, stages, or market descriptions. Return an empty graph when no named capital actor is present. Return canonical_url and valid_from as empty strings when absent. Encode attributes as key/value string pairs. Use invested_in only when an explicitly named investor, fund, or accelerator invested in an explicitly named company. Use founded only for a named person and named company, acquired only between named companies, and partnered_with only when the partnership is explicit. Investment attributes may contain amount, currency, stage, lead, announced_at, geography, sector, and thesis_tags. Never infer missing parties, amounts, dates, or relationships.',\n  input: [{ role: 'user', content: [{ type: 'input_text', text: JSON.stringify({ claim: evidence.claim_text, exact_excerpt: evidence.excerpt }) }] }],\n  text: { format: { type: 'json_schema', name: 'capital_entity_graph', strict: true, schema } }\n} } }];"
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.openai_request) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "7295fc18-0000-4000-8000-b3c7d1ce7617",
+      "name": "OpenAI Capital Graph Extraction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        440
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1800,
+      "alwaysOutputData": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "7a0hdZ68ejgk6EnD",
+          "name": "OpenAI account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "13040ce2-0000-4000-8000-703147e9cba8",
+      "name": "Parse Capital Graph",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        440
+      ],
+      "parameters": {
+        "jsCode": "const evidence = $('Build Capital Graph Request').item.json;\nconst response = $input.first().json ?? {};\nif (response.error) {\n  const message = response.error.description || response.error.message || 'OPENAI_CAPITAL_GRAPH_REQUEST_FAILED';\n  throw new Error('OPENAI_CAPITAL_GRAPH_REQUEST_FAILED: ' + message);\n}\nconst text = (response.output ?? []).flatMap((item) => item.content ?? []).find((item) => item.type === 'output_text')?.text;\nif (!text) throw new Error('OPENAI_CAPITAL_GRAPH_OUTPUT_MISSING');\nlet parsed;\ntry { parsed = JSON.parse(text); }\ncatch { throw new Error('OPENAI_CAPITAL_GRAPH_OUTPUT_INVALID_JSON'); }\nif (!Array.isArray(parsed.entities) || !Array.isArray(parsed.relationships)) throw new Error('OPENAI_CAPITAL_GRAPH_OUTPUT_INVALID_SHAPE');\nconst attributesObject = (items) => Object.fromEntries((Array.isArray(items) ? items : [])\n  .filter((item) => item && typeof item.key === 'string' && item.key.trim())\n  .map((item) => [item.key.trim().slice(0, 100), String(item.value ?? '').slice(0, 1000)]));\nconst normalizeEntity = (entity) => ({ ...entity, canonical_url: entity.canonical_url || null, attributes: attributesObject(entity.attributes) });\nconst allowedEntityTypes = new Set(['company','investor','fund','accelerator','person']);\nconst genericNames = /^(market|industry|sector|funding|financing|funding round|investment|investments|investors|companies|startups|portfolio companies|follow-on financings|first financings|seed|series [a-z]|venture capital)$/i;\nconst evidenceText = (String(evidence.claim_text ?? '') + ' ' + String(evidence.excerpt ?? '')).toLowerCase();\nconst rejectedEntities = [];\nconst entities = parsed.entities.map(normalizeEntity).filter((entity) => {\n  const name = String(entity.name ?? '').trim();\n  const accepted = allowedEntityTypes.has(entity.entity_type) && name.length >= 2 && !genericNames.test(name) && evidenceText.includes(name.toLowerCase()) && Number(entity.confidence ?? 0) >= 0.65;\n  if (!accepted) rejectedEntities.push({ name, reason: 'ENTITY_QUALITY_GATE' });\n  return accepted;\n});\nconst entityKey = (entity) => String(entity.entity_type) + ':' + String(entity.name ?? '').trim().toLowerCase();\nconst acceptedKeys = new Set(entities.map(entityKey));\nlet rejectedRelationships = 0;\nconst relationships = parsed.relationships.map((relationship) => ({\n  ...relationship,\n  from_entity: normalizeEntity(relationship.from_entity),\n  to_entity: normalizeEntity(relationship.to_entity),\n  valid_from: relationship.valid_from || null,\n  attributes: attributesObject(relationship.attributes)\n})).filter((relationship) => {\n  const fromAccepted = acceptedKeys.has(entityKey(relationship.from_entity));\n  const toAccepted = acceptedKeys.has(entityKey(relationship.to_entity));\n  const typeValid = (\n    relationship.relationship_type === 'invested_in' && ['investor','fund','accelerator'].includes(relationship.from_entity.entity_type) && relationship.to_entity.entity_type === 'company'\n  ) || (\n    relationship.relationship_type === 'founded' && relationship.from_entity.entity_type === 'person' && relationship.to_entity.entity_type === 'company'\n  ) || (\n    relationship.relationship_type === 'acquired' && relationship.from_entity.entity_type === 'company' && relationship.to_entity.entity_type === 'company'\n  ) || relationship.relationship_type === 'partnered_with';\n  const accepted = fromAccepted && toAccepted && typeValid && Number(relationship.confidence ?? 0) >= 0.65;\n  if (!accepted) rejectedRelationships++;\n  return accepted;\n});\nreturn [{ json: { p_graph: { workspace_id: evidence.workspace_id, evidence_id: evidence.id,\n  entities, relationships }, quality: { entities_rejected: rejectedEntities.length, relationships_rejected: rejectedRelationships } } }];"
+      }
+    },
+    {
+      "id": "c197170e-0000-4000-8000-08e0a67a1bfc",
+      "name": "Upsert Capital Graph",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        440
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Registry Configuration').item.json.supabase_url + '/rest/v1/rpc/n8n_upsert_research_graph' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_graph: $json.p_graph }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "id": "55a317d6-0000-4000-8000-e55977bc26de",
+      "name": "Registry Item Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        440
+      ],
+      "parameters": {
+        "jsCode": "const response = $input.first().json ?? {};\nconst result = Array.isArray(response) ? (response[0] ?? {}) : response;\nreturn [{ json: {\n  completed: true,\n  entities_upserted: Number(result.entities_upserted ?? 0),\n  relationships_upserted: Number(result.relationships_upserted ?? 0),\n  entities_rejected: Number($('Parse Capital Graph').item.json.quality?.entities_rejected ?? 0),\n  relationships_rejected: Number($('Parse Capital Graph').item.json.quality?.relationships_rejected ?? 0),\n  empty_graph: Number(result.entities_upserted ?? 0) === 0 && Number(result.relationships_upserted ?? 0) === 0\n} }];"
+      }
+    },
+    {
+      "id": "711d27af-0000-4000-8000-def441521799",
+      "name": "Registry Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        200
+      ],
+      "parameters": {
+        "jsCode": "const rows = $input.all().map((item) => item.json ?? {});\nreturn [{ json: {\n  status: 'completed',\n  evidence_processed: rows.length,\n  entities_upserted: rows.reduce((sum, row) => sum + Number(row.entities_upserted ?? 0), 0),\n  relationships_upserted: rows.reduce((sum, row) => sum + Number(row.relationships_upserted ?? 0), 0),\n  entities_rejected: rows.reduce((sum, row) => sum + Number(row.entities_rejected ?? 0), 0),\n  relationships_rejected: rows.reduce((sum, row) => sum + Number(row.relationships_rejected ?? 0), 0),\n  evidence_with_empty_graph: rows.filter((row) => row.empty_graph).length\n} }];"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Registry Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Capital Registry": {
+      "main": [
+        [
+          {
+            "node": "Registry Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registry Configuration": {
+      "main": [
+        [
+          {
+            "node": "Load Grounded Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Grounded Evidence": {
+      "main": [
+        [
+          {
+            "node": "Normalize Evidence Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Evidence Queue": {
+      "main": [
+        [
+          {
+            "node": "Evidence Graph Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evidence Graph Loop": {
+      "main": [
+        [
+          {
+            "node": "Registry Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Capital Graph Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Capital Graph Request": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Capital Graph Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Capital Graph Extraction": {
+      "main": [
+        [
+          {
+            "node": "Parse Capital Graph",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Capital Graph": {
+      "main": [
+        [
+          {
+            "node": "Upsert Capital Graph",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Capital Graph": {
+      "main": [
+        [
+          {
+            "node": "Registry Item Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registry Item Complete": {
+      "main": [
+        [
+          {
+            "node": "Evidence Graph Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "tags": []
+}

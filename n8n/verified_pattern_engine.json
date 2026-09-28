@@ -1,0 +1,616 @@
+{
+  "name": "RE 09 - Verified Pattern Engine",
+  "nodes": [
+    {
+      "id": "59543baf-0000-4000-8000-d42f8398d497",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        240
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "8d8af5a7-0000-4000-8000-37f07bc986d6",
+      "name": "Daily Pattern Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "2487316a-0000-4000-8000-728fe24b19a7",
+      "name": "Pattern Engine Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: {\n  supabase_url: 'https://jaeltkzfjgrzgxgzxlfs.supabase.co',\n  workspace_id: 'a51b8277-4cd5-4f8a-9ffd-4ddbe56683da',\n  domain_limit: 3,\n  observations_per_domain: 12,\n  max_patterns_per_domain: 3,\n  model: 'gpt-6-luna',\n  engine_version: 'pattern-engine-v1.0.0'\n} }];"
+      }
+    },
+    {
+      "id": "35e050d3-0000-4000-8000-6e4c998287b7",
+      "name": "Load Accepted Observations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        320
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.supabase_url + '/rest/v1/rpc/n8n_list_pattern_observation_candidates' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_workspace_id: $json.workspace_id, p_domain_limit: $json.domain_limit, p_observations_per_domain: $json.observations_per_domain }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "d0e9688e-0000-4000-8000-c8afd912ea95",
+      "name": "Build Diverse Observation Packs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const config = $('Pattern Engine Configuration').first().json;\nconst rows = $input.all().flatMap((item) => Array.isArray(item.json) ? item.json : [item.json])\n  .filter((row) => row && row.observation_id && row.workspace_domain_id);\nif (!rows.length) return [{ json: { config, no_observations: true, observation_items: [], source_family_count: 0 } }];\nconst groups = new Map();\nfor (const row of rows) {\n  const key = row.workspace_domain_id;\n  if (!groups.has(key)) groups.set(key, { config, no_observations: false, workspace_id: row.workspace_id,\n    workspace_domain_id: key, domain_key: row.domain_key, domain_name: row.domain_name, observation_items: [] });\n  groups.get(key).observation_items.push({ observation_id: row.observation_id, observation_type: row.observation_type,\n    title: row.title, statement: row.statement, time_window_start: row.time_window_start,\n    time_window_end: row.time_window_end, confidence: row.confidence,\n    signal_count: Number(row.signal_count ?? 0), source_count: Number(row.source_count ?? 0),\n    source_ids: Array.isArray(row.source_ids) ? row.source_ids : [], accepted_at: row.accepted_at });\n}\nreturn [...groups.values()].map((pack) => ({ json: { ...pack,\n  source_family_count: new Set(pack.observation_items.flatMap((item) => item.source_ids)).size } }));"
+      }
+    },
+    {
+      "id": "f5b602db-0000-4000-8000-09945d28a222",
+      "name": "Pattern Domain Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        960,
+        320
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "f8d3df6c-0000-4000-8000-5e68bb6ebe3e",
+      "name": "Has Sufficient Diverse Observations?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        440
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1b360b6d-0000-4000-8000-c6da1c9964d6",
+              "leftValue": "={{ $json.no_observations !== true && $json.observation_items.length >= 3 && $json.source_family_count >= 3 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "7b2c5e09-0000-4000-8000-1951b3b8343a",
+      "name": "Build Pattern Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        340
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pack = $input.first().json;\nconst observationReference = { type: 'object', additionalProperties: false, properties: {\n  observation_id: { type: 'string' }, role: { type: 'string', enum: ['supporting','contradicting','context'] },\n  weight: { type: 'number' }\n}, required: ['observation_id','role','weight'] };\nconst pattern = { type: 'object', additionalProperties: false, properties: {\n  pattern_type: { type: 'string', enum: ['capital_flow','market_activity','technology_adoption','research_development','regulatory_shift','competitive_movement','operational_change','talent_flow','product_evolution','investment_thesis','other'] },\n  title: { type: 'string' }, statement: { type: 'string' },\n  time_window_start: { type: 'string' }, time_window_end: { type: 'string' },\n  first_detected_at: { type: 'string' }, last_confirmed_at: { type: 'string' },\n  strength_score: { type: 'number' }, persistence_score: { type: 'number' }, diversity_score: { type: 'number' }, confidence: { type: 'number' },\n  observations: { type: 'array', minItems: 3, maxItems: 12, items: observationReference }\n}, required: ['pattern_type','title','statement','time_window_start','time_window_end','first_detected_at','last_confirmed_at','strength_score','persistence_score','diversity_score','confidence','observations'] };\nconst schema = { type: 'object', additionalProperties: false, properties: {\n  patterns: { type: 'array', maxItems: pack.config.max_patterns_per_domain, items: pattern }\n}, required: ['patterns'] };\nconst observationPack = { domain_key: pack.domain_key, domain_name: pack.domain_name,\n  independent_source_family_count: pack.source_family_count, accepted_observations: pack.observation_items };\nreturn [{ json: { ...pack, openai_request: { model: pack.config.model, store: false, max_output_tokens: 2000,\n  instructions: 'Create only verified patterns using the accepted observations supplied. Every pattern must cite at least three supplied observation_id values backed by at least three independent source families and at least two distinct events or entities. Identify recurrence across time or repetition across independent entities. Do not create patterns directly from signals. Do not claim a trend, causal relationship, prediction, hypothesis, recommendation, or final insight. Do not add facts, entities, dates, amounts, or conclusions absent from the cited observations. Use empty time-window strings when the observations do not establish the boundary. Return an empty patterns array when no defensible multi-observation pattern exists. Valid outputs are automatically persisted; no human gate exists beyond signal review.',\n  input: [{ role: 'user', content: [{ type: 'input_text', text: JSON.stringify(observationPack) }] }],\n  text: { format: { type: 'json_schema', name: 'accepted_observation_patterns', strict: true, schema } }\n} } }];"
+      }
+    },
+    {
+      "id": "ccb76b2b-0000-4000-8000-f1c7fb2f5940",
+      "name": "OpenAI Pattern Synthesis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        340
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.openai_request) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "7a0hdZ68ejgk6EnD",
+          "name": "OpenAI account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "482793b6-0000-4000-8000-8c1c198c56d9",
+      "name": "Validate Pattern Candidates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        340
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pack = $('Build Pattern Request').item.json;\nconst response = $input.first().json ?? {};\nconst outputText = (response.output ?? []).flatMap((item) => item.content ?? []).find((item) => item.type === 'output_text')?.text;\nlet parsed = null;\ntry { if (outputText) parsed = JSON.parse(outputText); } catch {}\nconst allowedTypes = new Set(['capital_flow','market_activity','technology_adoption','research_development','regulatory_shift','competitive_movement','operational_change','talent_flow','product_evolution','investment_thesis','other']);\nconst observationById = new Map(pack.observation_items.map((item) => [item.observation_id, item]));\nconst normalizeText = (value, max) => {\n  const raw = String(value ?? '');\n  let output = '';\n  let pendingSpace = false;\n  for (const character of raw) {\n    if (character.trim() === '') { pendingSpace = output.length > 0; continue; }\n    if (pendingSpace) output += ' ';\n    output += character;\n    pendingSpace = false;\n    if (output.length >= max) break;\n  }\n  return output.trim().slice(0, max);\n};\nconst forbiddenWords = new Set(['trend','trends','predict','predicts','forecast','forecasts','causal','causes','caused','drives','driven','will','should','must','recommend','recommendation']);\nconst seen = new Set();\nconst valid = [];\nlet rejected = 0;\nfor (const candidate of (Array.isArray(parsed?.patterns) ? parsed.patterns : [])) {\n  const title = normalizeText(candidate.title, 240);\n  const statement = normalizeText(candidate.statement, 2000);\n  const refs = (Array.isArray(candidate.observations) ? candidate.observations : []).filter((ref) => observationById.has(ref.observation_id));\n  const uniqueRefs = [...new Map(refs.map((ref) => [ref.observation_id, ref])).values()].slice(0, 12);\n  const sourceFamilies = new Set(uniqueRefs.flatMap((ref) => observationById.get(ref.observation_id).source_ids ?? []));\n  const start = String(candidate.time_window_start ?? '').trim();\n  const end = String(candidate.time_window_end ?? '').trim();\n  const firstDetected = String(candidate.first_detected_at ?? '').trim();\n  const lastConfirmed = String(candidate.last_confirmed_at ?? '').trim();\n  const datesValid = (!start || !Number.isNaN(Date.parse(start))) && (!end || !Number.isNaN(Date.parse(end)))\n    && (!start || !end || Date.parse(end) >= Date.parse(start))\n    && !Number.isNaN(Date.parse(firstDetected)) && !Number.isNaN(Date.parse(lastConfirmed))\n    && Date.parse(lastConfirmed) >= Date.parse(firstDetected);\n  const words = new Set((title + ' ' + statement).toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter(Boolean));\n  const forbiddenClaim = [...forbiddenWords].some((word) => words.has(word));\n  const key = String(candidate.pattern_type) + ':' + title.toLowerCase();\n  if (!allowedTypes.has(candidate.pattern_type) || title.length < 8 || statement.length < 30\n    || uniqueRefs.length < 3 || sourceFamilies.size < 3 || !datesValid || forbiddenClaim || seen.has(key)) { rejected++; continue; }\n  seen.add(key);\n  valid.push({ p_pattern: { workspace_id: pack.workspace_id, workspace_domain_id: pack.workspace_domain_id,\n    pattern_type: candidate.pattern_type, title, statement,\n    time_window_start: start, time_window_end: end,\n    first_detected_at: firstDetected, last_confirmed_at: lastConfirmed,\n    strength_score: Math.max(0, Math.min(1, Number(candidate.strength_score ?? 0))),\n    persistence_score: Math.max(0, Math.min(1, Number(candidate.persistence_score ?? 0))),\n    diversity_score: Math.max(0, Math.min(1, Number(candidate.diversity_score ?? 0))),\n    confidence: Math.max(0, Math.min(1, Number(candidate.confidence ?? 0))),\n    observations: uniqueRefs.map((ref) => ({ observation_id: ref.observation_id,\n      role: ['supporting','contradicting','context'].includes(ref.role) ? ref.role : 'supporting',\n      weight: Math.max(0, Math.min(1, Number(ref.weight ?? 0.7))) })),\n    engine_version: pack.config.engine_version, metadata: { generation_mode: 'accepted_observations_only',\n      input_observation_count: uniqueRefs.length, input_source_family_count: sourceFamilies.size, domain_key: pack.domain_key }\n  }, candidate_quality: { input_observation_count: uniqueRefs.length, input_source_family_count: sourceFamilies.size } });\n}\nif (!valid.length) return [{ json: { no_pattern: true, workspace_domain_id: pack.workspace_domain_id,\n  domain_key: pack.domain_key, provider_error: response.error ? 'OPENAI_PATTERN_REQUEST_FAILED' : null,\n  candidates_rejected: rejected, openai_calls: 1 } }];\nreturn valid.map((item) => ({ json: { ...item, no_pattern: false,\n  candidates_rejected: rejected, openai_calls: 1 } }));"
+      }
+    },
+    {
+      "id": "97cebc4e-0000-4000-8000-8b7d0783d61a",
+      "name": "Pattern Candidate Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2160,
+        340
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "17fc6998-0000-4000-8000-bef62aca1b54",
+      "name": "Has Valid Pattern?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2400,
+        460
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ea0663cd-0000-4000-8000-1a2a43dc508f",
+              "leftValue": "={{ $json.no_pattern !== true && Boolean($json.p_pattern) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "fcb8c1a4-0000-4000-8000-05d75f7872fa",
+      "name": "Persist Validated Pattern",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        380
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Pattern Engine Configuration').item.json.supabase_url + '/rest/v1/rpc/n8n_upsert_verified_pattern' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_pattern: $json.p_pattern }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "1696d266-0000-4000-8000-0891d7feb947",
+      "name": "Pattern Candidate Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        380
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const response = $input.first().json ?? {};\nconst result = Array.isArray(response) ? (response[0] ?? {}) : response;\nreturn [{ json: { completed: true, pattern_id: result.pattern_id ?? null,\n  status: result.status ?? 'emerging', is_new: Boolean(result.is_new),\n  observation_count: Number(result.observation_count ?? 0), source_family_count: Number(result.source_family_count ?? 0),\n  event_entity_count: Number(result.event_entity_count ?? 0), strength_score: Number(result.strength_score ?? 0),\n  persistence_score: Number(result.persistence_score ?? 0), diversity_score: Number(result.diversity_score ?? 0),\n  confidence: Number(result.confidence ?? 0), promoted: Boolean(result.promoted), openai_calls: 0 } }];"
+      }
+    },
+    {
+      "id": "423fd21a-0000-4000-8000-e8b387e06532",
+      "name": "Skipped Pattern Candidate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        580
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const row = $input.first().json;\nreturn [{ json: { completed: false, skipped: true, provider_error: row.provider_error ?? null,\n  candidates_rejected: Number(row.candidates_rejected ?? 0), openai_calls: Number(row.openai_calls ?? 0) } }];"
+      }
+    },
+    {
+      "id": "fffb71bd-0000-4000-8000-e500d90f6667",
+      "name": "Pattern Domain Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        180
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map((item) => item.json ?? {});\nreturn [{ json: { domain_completed: true, patterns_persisted: rows.filter((row) => row.completed).length,\n  new_patterns: rows.filter((row) => row.completed && row.is_new).length,\n  promoted_patterns: rows.filter((row) => row.completed && row.promoted).length,\n  candidates_rejected: rows.reduce((sum, row) => sum + Number(row.candidates_rejected ?? 0), 0),\n  provider_errors: [...new Set(rows.map((row) => row.provider_error).filter(Boolean))], openai_calls: 1 } }];"
+      }
+    },
+    {
+      "id": "664aa9a3-0000-4000-8000-978723321378",
+      "name": "No Sufficient Observations Domain Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        600
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: { domain_completed: true,\n  no_sufficient_diverse_observations: true, patterns_persisted: 0, new_patterns: 0,\n  promoted_patterns: 0, candidates_rejected: 0, provider_errors: [], openai_calls: 0 } }];"
+      }
+    },
+    {
+      "id": "06f8ab33-0000-4000-8000-f4096b94d004",
+      "name": "Pattern Engine Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        120
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map((item) => item.json ?? {});\nconst errors = [...new Set(rows.flatMap((row) => row.provider_errors ?? []).filter(Boolean))];\nreturn [{ json: { status: errors.length && rows.every((row) => Number(row.patterns_persisted ?? 0) === 0)\n    ? 'failed' : (errors.length ? 'partial' : 'completed'),\n  domains_processed: rows.filter((row) => !row.no_sufficient_diverse_observations).length,\n  no_sufficient_diverse_observations: rows.some((row) => row.no_sufficient_diverse_observations),\n  patterns_persisted: rows.reduce((sum, row) => sum + Number(row.patterns_persisted ?? 0), 0),\n  new_patterns: rows.reduce((sum, row) => sum + Number(row.new_patterns ?? 0), 0),\n  promoted_patterns: rows.reduce((sum, row) => sum + Number(row.promoted_patterns ?? 0), 0),\n  candidates_rejected: rows.reduce((sum, row) => sum + Number(row.candidates_rejected ?? 0), 0),\n  openai_calls: rows.reduce((sum, row) => sum + Number(row.openai_calls ?? 0), 0), provider_errors: errors,\n  output_status: 'emerging', note: 'Signal approval is the only human gate. Patterns are automatically persisted from accepted observations only. No new human review is introduced. Emerging patterns may be promoted to persistent by deterministic revalidation when thresholds are met.' } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Pattern Engine Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Pattern Check": {
+      "main": [
+        [
+          {
+            "node": "Pattern Engine Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pattern Engine Configuration": {
+      "main": [
+        [
+          {
+            "node": "Load Accepted Observations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Accepted Observations": {
+      "main": [
+        [
+          {
+            "node": "Build Diverse Observation Packs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Diverse Observation Packs": {
+      "main": [
+        [
+          {
+            "node": "Pattern Domain Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pattern Domain Loop": {
+      "main": [
+        [
+          {
+            "node": "Pattern Engine Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Sufficient Diverse Observations?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Sufficient Diverse Observations?": {
+      "main": [
+        [
+          {
+            "node": "Build Pattern Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Sufficient Observations Domain Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Pattern Request": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Pattern Synthesis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Pattern Synthesis": {
+      "main": [
+        [
+          {
+            "node": "Validate Pattern Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Pattern Candidates": {
+      "main": [
+        [
+          {
+            "node": "Pattern Candidate Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pattern Candidate Loop": {
+      "main": [
+        [
+          {
+            "node": "Pattern Domain Complete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Valid Pattern?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Valid Pattern?": {
+      "main": [
+        [
+          {
+            "node": "Persist Validated Pattern",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skipped Pattern Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Validated Pattern": {
+      "main": [
+        [
+          {
+            "node": "Pattern Candidate Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pattern Candidate Complete": {
+      "main": [
+        [
+          {
+            "node": "Pattern Candidate Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skipped Pattern Candidate": {
+      "main": [
+        [
+          {
+            "node": "Pattern Candidate Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pattern Domain Complete": {
+      "main": [
+        [
+          {
+            "node": "Pattern Domain Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Sufficient Observations Domain Complete": {
+      "main": [
+        [
+          {
+            "node": "Pattern Domain Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "tags": [],
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionTimeout": 1800
+  }
+}

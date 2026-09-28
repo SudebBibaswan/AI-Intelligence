@@ -1,0 +1,616 @@
+{
+  "name": "RE 07 - Verified Evidence Signal Engine",
+  "nodes": [
+    {
+      "id": "8efd5c5b-0000-4000-8000-f21c226816d5",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        240
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "fa600ebd-0000-4000-8000-e514c4b6dfd8",
+      "name": "Daily Signal Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c4980d34-0000-4000-8000-4493f972698c",
+      "name": "Signal Engine Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: {\n  supabase_url: 'https://jaeltkzfjgrzgxgzxlfs.supabase.co',\n  workspace_id: 'a51b8277-4cd5-4f8a-9ffd-4ddbe56683da',\n  domain_limit: 3,\n  evidence_per_domain: 12,\n  evidence_per_source: 2,\n  max_signals_per_domain: 5,\n  model: 'gpt-6-luna',\n  engine_version: 'signal-engine-v1.0.2'\n} }];"
+      }
+    },
+    {
+      "id": "416d4735-0000-4000-8000-4d6a8135fdb9",
+      "name": "Load Verified Evidence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        320
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.supabase_url + '/rest/v1/rpc/n8n_list_signal_evidence_candidates' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_workspace_id: $json.workspace_id, p_domain_limit: $json.domain_limit, p_evidence_per_domain: $json.evidence_per_domain, p_evidence_per_source: $json.evidence_per_source }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "eb047cff-0000-4000-8000-9a24b472c81f",
+      "name": "Build Diverse Evidence Packs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const config = $('Signal Engine Configuration').first().json;\nconst rows = $input.all().flatMap((item) => Array.isArray(item.json) ? item.json : [item.json])\n  .filter((row) => row && row.evidence_id && row.workspace_domain_id);\nif (!rows.length) return [{ json: { config, no_evidence: true, evidence_items: [], source_count: 0 } }];\nconst groups = new Map();\nfor (const row of rows) {\n  const key = row.workspace_domain_id;\n  if (!groups.has(key)) groups.set(key, { config, no_evidence: false, workspace_id: row.workspace_id,\n    workspace_domain_id: key, domain_key: row.domain_key, domain_name: row.domain_name, evidence_items: [] });\n  groups.get(key).evidence_items.push({ evidence_id: row.evidence_id, source_id: row.source_id,\n    source_title: row.source_title, canonical_url: row.canonical_url, publisher: row.publisher,\n    published_at: row.published_at, source_type: row.source_type, source_quality_score: row.source_quality_score,\n    evidence_type: row.evidence_type, claim_text: row.claim_text, excerpt: row.excerpt,\n    polarity: row.polarity, confidence: row.confidence, linked_entities: row.linked_entities ?? [] });\n}\nreturn [...groups.values()].map((pack) => ({ json: { ...pack,\n  source_count: new Set(pack.evidence_items.map((item) => item.source_id)).size } }));"
+      }
+    },
+    {
+      "id": "cce52430-0000-4000-8000-b29af02133f7",
+      "name": "Domain Pack Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        960,
+        320
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "171c7ec2-0000-4000-8000-036701ed05e9",
+      "name": "Has Verified Evidence Pack?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        440
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3ae29a32-0000-4000-8000-0cc6f2728347",
+              "leftValue": "={{ $json.no_evidence !== true && $json.evidence_items.length > 0 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "3726f736-0000-4000-8000-3a93ef6c18ed",
+      "name": "Build Signal Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        340
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pack = $input.first().json;\nconst evidenceReference = { type: 'object', additionalProperties: false, properties: {\n  evidence_id: { type: 'string' }, role: { type: 'string', enum: ['supporting','contradicting','context'] },\n  weight: { type: 'number' }\n}, required: ['evidence_id','role','weight'] };\nconst signal = { type: 'object', additionalProperties: false, properties: {\n  signal_type: { type: 'string', enum: ['funding','launch','partnership','acquisition','founder_movement','hiring','research','technology','regulation','market','shutdown','investment_thesis','other'] },\n  title: { type: 'string' }, summary: { type: 'string' }, event_at: { type: 'string' },\n  confidence: { type: 'number' }, novelty_score: { type: 'number' }, importance_score: { type: 'number' },\n  geographies: { type: 'array', maxItems: 10, items: { type: 'string' } },\n  topics: { type: 'array', maxItems: 12, items: { type: 'string' } },\n  evidence: { type: 'array', minItems: 1, maxItems: 6, items: evidenceReference }\n}, required: ['signal_type','title','summary','event_at','confidence','novelty_score','importance_score','geographies','topics','evidence'] };\nconst schema = { type: 'object', additionalProperties: false, properties: {\n  signals: { type: 'array', maxItems: pack.config.max_signals_per_domain, items: signal }\n}, required: ['signals'] };\nconst evidencePack = { domain_key: pack.domain_key, domain_name: pack.domain_name,\n  independent_source_count: pack.source_count, evidence_items: pack.evidence_items };\nreturn [{ json: { ...pack, openai_request: { model: pack.config.model, store: false, max_output_tokens: 2200,\n  instructions: 'Create concise intelligence signals using only the verified evidence items supplied. Every signal must cite one or more supplied evidence_id values. Do not add facts, entities, dates, amounts, causality, or conclusions absent from the cited evidence. Keep separate events as separate signals. Multiple claims from one source are not independent corroboration. Set event_at to an empty string when no complete event date exists. Otherwise event_at must use ISO 8601 and include an explicit four-digit year, month, and day (for example 2026-09-14); never return partial dates such as September 14. Use contradicting evidence when it directly weakens the signal. Return an empty signals array when the evidence is not decision-useful or is unrelated to the configured domain. Signals remain drafts and are not patterns, hypotheses, or final insights.',\n  input: [{ role: 'user', content: [{ type: 'input_text', text: JSON.stringify(evidencePack) }] }],\n  text: { format: { type: 'json_schema', name: 'verified_evidence_signals', strict: true, schema } }\n} } }];"
+      }
+    },
+    {
+      "id": "f64ec10f-0000-4000-8000-6c855aa965d7",
+      "name": "OpenAI Signal Extraction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        340
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.openai_request) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "7a0hdZ68ejgk6EnD",
+          "name": "OpenAI account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "85c8d1b4-0000-4000-8000-7d38fe95e787",
+      "name": "Validate Signal Candidates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        340
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pack = $('Build Signal Request').item.json;\nconst response = $input.first().json ?? {};\nconst outputText = (response.output ?? []).flatMap((item) => item.content ?? []).find((item) => item.type === 'output_text')?.text;\nlet parsed = null;\ntry { if (outputText) parsed = JSON.parse(outputText); } catch {}\nconst allowedTypes = new Set(['funding','launch','partnership','acquisition','founder_movement','hiring','research','technology','regulation','market','shutdown','investment_thesis','other']);\nconst evidenceById = new Map(pack.evidence_items.map((item) => [item.evidence_id, item]));\nconst normalizeText = (value, max) => {\n  const raw = String(value ?? '');\n  let output = '';\n  let pendingSpace = false;\n  for (const character of raw) {\n    if (character.trim() === '') {\n      pendingSpace = output.length > 0;\n      continue;\n    }\n    if (pendingSpace) output += ' ';\n    output += character;\n    pendingSpace = false;\n    if (output.length >= max) break;\n  }\n  return output.trim().slice(0, max);\n};\nconst cleanArray = (value, max) => [...new Set((Array.isArray(value) ? value : []).map((item) => normalizeText(item, 300)).filter(Boolean))].slice(0, max);\nconst seen = new Set();\nconst valid = [];\nlet rejected = 0;\nfor (const candidate of (Array.isArray(parsed?.signals) ? parsed.signals : [])) {\n  const title = normalizeText(candidate.title, 240);\n  const summary = normalizeText(candidate.summary, 2000);\n  const refs = (Array.isArray(candidate.evidence) ? candidate.evidence : []).filter((ref) => evidenceById.has(ref.evidence_id));\n  const uniqueRefs = [...new Map(refs.map((ref) => [ref.evidence_id + ':' + ref.role, ref])).values()].slice(0, 6);\n  const rawEventAt = String(candidate.event_at ?? '').trim();\n  const dateDigits = rawEventAt.length >= 10\n    ? rawEventAt.slice(0, 4) + rawEventAt.slice(5, 7) + rawEventAt.slice(8, 10)\n    : '';\n  const hasExplicitDate = rawEventAt.length >= 10 && rawEventAt[4] === '-' && rawEventAt[7] === '-'\n    && dateDigits.length === 8 && [...dateDigits].every((character) => character >= '0' && character <= '9');\n  const parsedEventMs = rawEventAt ? Date.parse(rawEventAt) : NaN;\n  const eventValid = !rawEventAt || (hasExplicitDate && !Number.isNaN(parsedEventMs));\n  const eventAt = rawEventAt && eventValid ? new Date(parsedEventMs).toISOString() : '';\n  const key = String(candidate.signal_type) + ':' + title.toLowerCase();\n  if (!allowedTypes.has(candidate.signal_type) || title.length < 8 || summary.length < 30 || !uniqueRefs.length || !eventValid || seen.has(key)) { rejected++; continue; }\n  seen.add(key);\n  const citedSources = new Set(uniqueRefs.map((ref) => evidenceById.get(ref.evidence_id).source_id));\n  valid.push({ p_signal: { workspace_id: pack.workspace_id, workspace_domain_id: pack.workspace_domain_id,\n    signal_type: candidate.signal_type, title, summary, event_at: eventAt,\n    confidence: Math.max(0, Math.min(1, Number(candidate.confidence ?? 0))),\n    novelty_score: Math.max(0, Math.min(1, Number(candidate.novelty_score ?? 0))),\n    importance_score: Math.max(0, Math.min(1, Number(candidate.importance_score ?? 0))),\n    geographies: cleanArray(candidate.geographies, 10), topics: cleanArray(candidate.topics, 12),\n    evidence: uniqueRefs.map((ref) => ({ evidence_id: ref.evidence_id,\n      role: ['supporting','contradicting','context'].includes(ref.role) ? ref.role : 'supporting',\n      weight: Math.max(0, Math.min(1, Number(ref.weight ?? 0.7))) })),\n    engine_version: pack.config.engine_version, metadata: { generation_mode: 'verified_evidence_only',\n      input_source_count: citedSources.size, domain_key: pack.domain_key }\n  }, candidate_quality: { input_source_count: citedSources.size } });\n}\nif (!valid.length) return [{ json: { no_signal: true, workspace_domain_id: pack.workspace_domain_id,\n  domain_key: pack.domain_key, provider_error: response.error ? 'OPENAI_SIGNAL_REQUEST_FAILED' : null,\n  candidates_rejected: rejected, openai_calls: 1 } }];\nreturn valid.map((item) => ({ json: { ...item, no_signal: false, candidates_rejected: rejected, openai_calls: 1 } }));"
+      }
+    },
+    {
+      "id": "dbea53bb-0000-4000-8000-1e97e5c90e78",
+      "name": "Signal Candidate Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2160,
+        340
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "c60498e7-0000-4000-8000-cb70aa12af9b",
+      "name": "Has Valid Signal?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2400,
+        460
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "331e9580-0000-4000-8000-5f3a38967d09",
+              "leftValue": "={{ $json.no_signal !== true && Boolean($json.p_signal) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "52697a74-0000-4000-8000-8d92fed8f021",
+      "name": "Persist Draft Signal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        380
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Signal Engine Configuration').item.json.supabase_url + '/rest/v1/rpc/n8n_upsert_verified_signal' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_signal: $json.p_signal }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "99d35c67-0000-4000-8000-d70a8601d7be",
+      "name": "Signal Candidate Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        380
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const response = $input.first().json ?? {};\nconst result = Array.isArray(response) ? (response[0] ?? {}) : response;\nreturn [{ json: { completed: true, signal_id: result.signal_id ?? null, status: result.status ?? 'draft',\n  is_new: Boolean(result.is_new), evidence_count: Number(result.evidence_count ?? 0),\n  source_count: Number(result.source_count ?? 0), corroboration_status: result.corroboration_status ?? 'single_source',\n  openai_calls: 0 } }];"
+      }
+    },
+    {
+      "id": "52e3ef8f-0000-4000-8000-0ba4b6dc461c",
+      "name": "Skipped Signal Candidate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        580
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const row = $input.first().json;\nreturn [{ json: { completed: false, skipped: true, provider_error: row.provider_error ?? null,\n  candidates_rejected: Number(row.candidates_rejected ?? 0), openai_calls: Number(row.openai_calls ?? 0) } }];"
+      }
+    },
+    {
+      "id": "a780b1b4-0000-4000-8000-4e9d17c72a4e",
+      "name": "Signal Domain Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        180
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map((item) => item.json ?? {});\nreturn [{ json: { domain_completed: true, signals_persisted: rows.filter((row) => row.completed).length,\n  new_signals: rows.filter((row) => row.completed && row.is_new).length,\n  multi_source_signals: rows.filter((row) => row.corroboration_status === 'multi_source').length,\n  candidates_rejected: rows.reduce((sum, row) => sum + Number(row.candidates_rejected ?? 0), 0),\n  provider_errors: [...new Set(rows.map((row) => row.provider_error).filter(Boolean))], openai_calls: 1 } }];"
+      }
+    },
+    {
+      "id": "4e9fc14f-0000-4000-8000-edb78b982895",
+      "name": "No Evidence Domain Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        600
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: { domain_completed: true,\n  no_verified_evidence: true, signals_persisted: 0, new_signals: 0, multi_source_signals: 0,\n  candidates_rejected: 0, provider_errors: [], openai_calls: 0 } }];"
+      }
+    },
+    {
+      "id": "03da0707-0000-4000-8000-22964f5eed12",
+      "name": "Signal Engine Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        120
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map((item) => item.json ?? {});\nconst errors = [...new Set(rows.flatMap((row) => row.provider_errors ?? []).filter(Boolean))];\nreturn [{ json: { status: errors.length && rows.every((row) => Number(row.signals_persisted ?? 0) === 0) ? 'failed' : (errors.length ? 'partial' : 'completed'),\n  domains_processed: rows.filter((row) => !row.no_verified_evidence).length,\n  no_verified_evidence: rows.some((row) => row.no_verified_evidence),\n  signals_persisted: rows.reduce((sum, row) => sum + Number(row.signals_persisted ?? 0), 0),\n  new_signals: rows.reduce((sum, row) => sum + Number(row.new_signals ?? 0), 0),\n  multi_source_signals: rows.reduce((sum, row) => sum + Number(row.multi_source_signals ?? 0), 0),\n  candidates_rejected: rows.reduce((sum, row) => sum + Number(row.candidates_rejected ?? 0), 0),\n  openai_calls: rows.reduce((sum, row) => sum + Number(row.openai_calls ?? 0), 0), provider_errors: errors,\n  output_status: 'draft', note: 'Signals use verified evidence only; single-source evidence is confidence-capped and no patterns or hypotheses are created.' } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Signal Engine Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Signal Check": {
+      "main": [
+        [
+          {
+            "node": "Signal Engine Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signal Engine Configuration": {
+      "main": [
+        [
+          {
+            "node": "Load Verified Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Verified Evidence": {
+      "main": [
+        [
+          {
+            "node": "Build Diverse Evidence Packs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Diverse Evidence Packs": {
+      "main": [
+        [
+          {
+            "node": "Domain Pack Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Domain Pack Loop": {
+      "main": [
+        [
+          {
+            "node": "Signal Engine Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Verified Evidence Pack?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Verified Evidence Pack?": {
+      "main": [
+        [
+          {
+            "node": "Build Signal Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Evidence Domain Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Signal Request": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Signal Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Signal Extraction": {
+      "main": [
+        [
+          {
+            "node": "Validate Signal Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Signal Candidates": {
+      "main": [
+        [
+          {
+            "node": "Signal Candidate Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signal Candidate Loop": {
+      "main": [
+        [
+          {
+            "node": "Signal Domain Complete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Valid Signal?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Valid Signal?": {
+      "main": [
+        [
+          {
+            "node": "Persist Draft Signal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skipped Signal Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Draft Signal": {
+      "main": [
+        [
+          {
+            "node": "Signal Candidate Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signal Candidate Complete": {
+      "main": [
+        [
+          {
+            "node": "Signal Candidate Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skipped Signal Candidate": {
+      "main": [
+        [
+          {
+            "node": "Signal Candidate Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signal Domain Complete": {
+      "main": [
+        [
+          {
+            "node": "Domain Pack Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Evidence Domain Complete": {
+      "main": [
+        [
+          {
+            "node": "Domain Pack Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "tags": [],
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionTimeout": 1800
+  }
+}

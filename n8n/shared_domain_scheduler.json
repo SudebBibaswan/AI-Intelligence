@@ -1,0 +1,457 @@
+{
+  "name": "RE 01 Shared Domain Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Shared Domain Scheduler — one-time setup\n\n1. In **Scheduler Configuration**, replace `REPLACE_PROJECT_REF`.\n2. Re-select the existing **supabase** credential if any HTTP node is red.\n3. In **Execute Research Engine**, select the imported **Research Engine** workflow once.\n4. Keep both workflows inactive while running one manual test.\n5. Publish/activate the Research Engine first, then publish this scheduler.\n\nThe database remains the authority for eligible domains, subscribers, slot idempotency, and collector workspace IDs.",
+        "width": 750,
+        "height": 390,
+        "color": 4
+      },
+      "id": "74b05395-0d59-484c-afeb-4103eaf01bb8",
+      "name": "SETUP - READ FIRST",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1120,
+        -500
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Cost-controlled behavior\n\nThe trigger checks hourly at minute 5, but Supabase returns work only at configured domain slots (default **00:00 and 12:00 UTC**).\n\nA run is queued only when at least one real workspace actively subscribes to that domain. Repeated calls for the same domain and slot return `created=false`, so the workflow does not pay providers twice.\n\nEvery queued domain runs sequentially through the existing Research Engine.",
+        "width": 700,
+        "height": 390,
+        "color": 5
+      },
+      "id": "555d8c61-7f31-4cdd-a1b0-df7b8c660a7c",
+      "name": "OPERATING MODEL",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        -500
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "025bb11b-ffdf-4d85-a3fc-03980c23fd51",
+      "name": "Manual Test Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "5 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "d31f04af-944c-4aa3-aa35-2d9345d7e822",
+      "name": "Hourly Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1120,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// EDIT ONLY the Supabase project URL here.\nconst supabaseUrl = 'https://REPLACE_PROJECT_REF.supabase.co'.replace(/\\/$/, '');\nif (!/^https:\\/\\/[a-z0-9-]+\\.supabase\\.co$/i.test(supabaseUrl) || supabaseUrl.includes('REPLACE_')) {\n  throw new Error('CONFIG_REQUIRED_SUPABASE_URL');\n}\n\nconst now = new Date();\nnow.setUTCMinutes(0, 0, 0);\n\nreturn [{\n  json: {\n    supabase_url: supabaseUrl,\n    slot_start: now.toISOString(),\n    scheduler_version: 'shared-domain-scheduler-v1.0.0'\n  }\n}];"
+      },
+      "id": "b88475d6-3e50-4cf2-a112-518c7bab3c94",
+      "name": "Scheduler Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -880,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.supabase_url + '/rest/v1/rpc/n8n_schedule_domain_collection_runs' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_slot_start: $json.slot_start }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "18243f20-1b74-4804-aa02-947dd5ebded7",
+      "name": "Queue Eligible Domain Runs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -620,
+        80
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "REPLACE_WITH_SUPABASE_CREDENTIAL_ID",
+          "name": "supabase"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const settings = $('Scheduler Configuration').first().json;\nconst rows = [];\n\nfor (const item of $input.all()) {\n  const value = item.json;\n  if (Array.isArray(value)) rows.push(...value);\n  else if (Array.isArray(value?.body)) rows.push(...value.body);\n  else if (value?.research_run_id) rows.push(value);\n}\n\nconst created = rows.filter((row) => row?.created === true);\nif (!created.length) {\n  return [{\n    json: {\n      has_new_runs: false,\n      slot_start: settings.slot_start,\n      message: 'No new eligible domain runs for this slot.'\n    }\n  }];\n}\n\nreturn created.map((row, index) => ({\n  json: {\n    ...row,\n    has_new_runs: true,\n    supabase_url: settings.supabase_url,\n    workspace_id: row.collector_workspace_id,\n    workspace_domain_id: row.collector_workspace_domain_id\n  },\n  pairedItem: { item: Math.min(index, Math.max(0, $input.all().length - 1)) }\n}));"
+      },
+      "id": "213d2667-3b7c-4171-a130-0ac0b2e30cfb",
+      "name": "Normalize Queued Runs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -360,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ec21242b-70cd-4978-aa57-4d6f0cab656c",
+              "leftValue": "={{ $json.has_new_runs === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0d4ced2e-e880-4ea5-aaab-0be28fb7489a",
+      "name": "Has New Domain Runs?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -100,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ok: true, dispatched: 0, ...$input.first().json } }];"
+      },
+      "id": "de7f0df1-4f9d-42d9-a648-8af0bee937b0",
+      "name": "No New Runs Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "af022ceb-be08-4911-a51d-d5de77f06131",
+      "name": "Domain Run Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        160,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.supabase_url + '/rest/v1/domains?id=eq.' + encodeURIComponent($json.domain_id) + '&select=id,key,name,description,default_config,config_version' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "bdc21e62-307f-4bbf-a14a-d26999f2691c",
+      "name": "Load Domain Profile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        420,
+        80
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "REPLACE_WITH_SUPABASE_CREDENTIAL_ID",
+          "name": "supabase"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "jsCode": "const queued = $('Domain Run Loop').item.json;\nconst response = $input.first().json;\nconst domain = Array.isArray(response) ? response[0] : response;\n\nif (!domain?.id || domain.id !== queued.domain_id) {\n  throw new Error('DOMAIN_PROFILE_NOT_FOUND_' + queued.domain_id);\n}\n\nreturn [{\n  json: {\n    supabase_url: queued.supabase_url,\n    research_run_id: queued.research_run_id,\n    request_id: queued.request_id,\n    domain_id: queued.domain_id,\n    domain_key: domain.key,\n    domain_name: domain.name,\n    domain_description: domain.description,\n    domain_default_config: domain.default_config ?? {},\n    domain_config_version: domain.config_version ?? 1,\n    collector_workspace_id: queued.collector_workspace_id,\n    collector_workspace_domain_id: queued.collector_workspace_domain_id,\n    workspace_id: queued.workspace_id,\n    workspace_domain_id: queued.workspace_domain_id,\n    subscriber_count: queued.subscriber_count,\n    slot_start: queued.slot_start,\n    engine_version: 'research-engine-v1.0.0',\n    schedule_config: {}\n  },\n  pairedItem: { item: 0 }\n}];"
+      },
+      "id": "e2962dc3-6d78-4915-a466-d477de2e084b",
+      "name": "Build Research Engine Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_RESEARCH_ENGINE_WORKFLOW_ID",
+          "mode": "id",
+          "cachedResultName": "Research Engine"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "53c96d99-676b-41d8-a3c7-269594516401",
+      "name": "Execute Research Engine",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        940,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const queued = $('Domain Run Loop').item.json;\nconst result = $input.first().json;\n\nreturn [{\n  json: {\n    domain_key: queued.domain_key,\n    research_run_id: queued.research_run_id,\n    request_id: queued.request_id,\n    subscriber_count: queued.subscriber_count,\n    status: result.status ?? (result.ok ? 'completed' : 'unknown'),\n    child_result: result\n  },\n  pairedItem: { item: 0 }\n}];"
+      },
+      "id": "b2cf69b4-62f2-4165-a493-73c363ffa015",
+      "name": "Record Domain Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $input.all().map((item) => item.json);\nreturn [{\n  json: {\n    ok: results.every((item) => !['failed', 'unknown'].includes(item.status)),\n    dispatched: results.length,\n    completed_at: new Date().toISOString(),\n    runs: results\n  }\n}];"
+      },
+      "id": "9d68821b-459c-4935-a457-8771c316819a",
+      "name": "Scheduler Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        -80
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Test Trigger": {
+      "main": [
+        [
+          {
+            "node": "Scheduler Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hourly Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Scheduler Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scheduler Configuration": {
+      "main": [
+        [
+          {
+            "node": "Queue Eligible Domain Runs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue Eligible Domain Runs": {
+      "main": [
+        [
+          {
+            "node": "Normalize Queued Runs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Queued Runs": {
+      "main": [
+        [
+          {
+            "node": "Has New Domain Runs?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has New Domain Runs?": {
+      "main": [
+        [
+          {
+            "node": "Domain Run Loop",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No New Runs Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Domain Run Loop": {
+      "main": [
+        [
+          {
+            "node": "Scheduler Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Load Domain Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Domain Profile": {
+      "main": [
+        [
+          {
+            "node": "Build Research Engine Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Research Engine Input": {
+      "main": [
+        [
+          {
+            "node": "Execute Research Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Research Engine": {
+      "main": [
+        [
+          {
+            "node": "Record Domain Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Domain Result": {
+      "main": [
+        [
+          {
+            "node": "Domain Run Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionTimeout": 10800
+  },
+  "versionId": "6cd4ed72-9e01-4105-a2b2-a454b25fe2d7",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

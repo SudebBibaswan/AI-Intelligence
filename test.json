@@ -1,0 +1,375 @@
+const responses = $input.all().map(item => item.json ?? {});
+const seed = $('Validate and Prepare Run').first().json;
+const plan = $('Parse Query Plan').first().json;
+const config = seed.config;
+
+const queryItems = Array.isArray(plan.query_items)
+  ? plan.query_items
+  : [];
+
+const normalizeText = value =>
+  String(value ?? '').trim().replace(/\s+/g, ' ');
+
+const queryKey = value => normalizeText(value).toLowerCase();
+
+const queryMap = new Map(
+  queryItems.map(item => [queryKey(item.query), item])
+);
+
+const trackingParameters = new Set([
+  'utm_source',
+  'utm_medium',
+  'utm_campaign',
+  'utm_term',
+  'utm_content',
+  'utm_id',
+  'gclid',
+  'fbclid',
+  'mc_cid',
+  'mc_eid',
+  'ref',
+  'ref_src',
+  'source'
+]);
+
+const searchWrapperHosts = new Set([
+  'html.duckduckgo.com',
+  'duckduckgo.com',
+  'google.com',
+  'www.google.com',
+  'bing.com',
+  'www.bing.com'
+]);
+
+function canonicalize(rawUrl) {
+  try {
+    const url = new URL(normalizeText(rawUrl));
+
+    if (!['http:', 'https:'].includes(url.protocol)) {
+      return null;
+    }
+
+    url.protocol = url.protocol.toLowerCase();
+    url.hostname = url.hostname.toLowerCase();
+    url.hash = '';
+
+    for (const key of [...url.searchParams.keys()]) {
+      const normalizedKey = key.toLowerCase();
+
+      if (
+        trackingParameters.has(normalizedKey) ||
+        normalizedKey.startsWith('utm_')
+      ) {
+        url.searchParams.delete(key);
+      }
+    }
+
+    url.searchParams.sort();
+    url.pathname = url.pathname.replace(/\/{2,}/g, '/');
+
+    if (url.pathname.length > 1) {
+      url.pathname = url.pathname.replace(/\/+$/, '');
+    }
+
+    if (
+      (url.protocol === 'https:' && url.port === '443') ||
+      (url.protocol === 'http:' && url.port === '80')
+    ) {
+      url.port = '';
+    }
+
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function tokenize(value) {
+  return new Set(
+    String(value ?? '')
+      .toLowerCase()
+      .match(/[a-z0-9][a-z0-9-]{2,}/g) ?? []
+  );
+}
+
+function lexicalOverlap(query, text) {
+  const queryTokens = tokenize(query);
+  const textTokens = tokenize(text);
+
+  if (!queryTokens.size) return 0;
+
+  let matches = 0;
+
+  for (const token of queryTokens) {
+    if (textTokens.has(token)) matches++;
+  }
+
+  return Math.min(1, matches / Math.max(3, queryTokens.size));
+}
+
+function sourceQuality(hostname) {
+  const host = hostname.replace(/^www\./, '');
+
+  if (
+    host.endsWith('.gov') ||
+    host.endsWith('.edu') ||
+    host.endsWith('.gov.in') ||
+    host.endsWith('europa.eu')
+  ) {
+    return 0.95;
+  }
+
+  if (
+    host === 'arxiv.org' ||
+    host === 'github.com' ||
+    host === 'who.int' ||
+    host === 'oecd.org'
+  ) {
+    return 0.88;
+  }
+
+  if (
+    (config.preferred_domains ?? []).some(
+      domain => host === domain || host.endsWith('.' + domain)
+    )
+  ) {
+    return 0.90;
+  }
+
+  if (host.includes('substack.com')) {
+    return 0.55;
+  }
+
+  return 0.65;
+}
+
+function determineSourceType(url, title) {
+  const host = url.hostname.replace(/^www\./, '');
+  const text = `${title} ${url.pathname}`.toLowerCase();
+
+  if (
+    host === 'arxiv.org' ||
+    /paper|research|whitepaper|evaluation report/.test(text)
+  ) {
+    return 'paper';
+  }
+
+  if (host === 'github.com') return 'repository';
+  if (/press-release|newsroom|press_release/.test(text)) return 'press_release';
+  if (/filing|10-k|10-q|8-k/.test(text)) return 'filing';
+  if (/jobs?|careers?/.test(text)) return 'job_posting';
+  if (/youtube\.com|youtu\.be/.test(host)) return 'video';
+
+  return 'article';
+}
+
+const deduplicated = new Map();
+let providerErrors = 0;
+
+responses.forEach((response, responseIndex) => {
+  /*
+   * Supports both:
+   * 1. Direct Tavily node: { query, results: [...] }
+   * 2. A possible nested structure: { data: { query, results: [...] } }
+   */
+  const payload =
+    response?.data && Array.isArray(response.data.results)
+      ? response.data
+      : response;
+
+  const results = Array.isArray(payload.results)
+    ? payload.results
+    : [];
+
+  const responseQuery = normalizeText(payload.query);
+
+  const queryContext =
+    queryMap.get(queryKey(responseQuery)) ??
+    queryItems[responseIndex] ??
+    {
+      query: responseQuery,
+      intent: 'current_news',
+      result_limit: config.limits.results_per_query
+    };
+
+  if (!results.length) {
+    providerErrors++;
+    return;
+  }
+
+  results.forEach((result, resultIndex) => {
+    const originalUrl = normalizeText(result.url);
+    const canonicalUrl = canonicalize(originalUrl);
+
+    if (!canonicalUrl) return;
+
+    const parsedUrl = new URL(canonicalUrl);
+    const hostname = parsedUrl.hostname.replace(/^www\./, '');
+
+    const configuredBlocked = (config.blocked_domains ?? []).some(
+      domain =>
+        hostname === domain ||
+        hostname.endsWith('.' + domain)
+    );
+
+    const isSearchWrapper = searchWrapperHosts.has(
+      parsedUrl.hostname.toLowerCase()
+    );
+
+    const blocked = configuredBlocked || isSearchWrapper;
+
+    const title =
+      normalizeText(result.title).slice(0, 500) ||
+      hostname;
+
+    const snippet =
+      normalizeText(
+        result.content ??
+        result.snippet ??
+        result.raw_content
+      ).slice(0, 3000);
+
+    const tavilyScore = Math.max(
+      0,
+      Math.min(1, Number(result.score ?? 0))
+    );
+
+    const lexicalScore = lexicalOverlap(
+      queryContext.query,
+      `${title} ${snippet}`
+    );
+
+    const qualityScore = sourceQuality(hostname);
+
+    const relevanceScore = Math.max(
+      0,
+      Math.min(
+        1,
+        tavilyScore * 0.65 +
+        lexicalScore * 0.20 +
+        qualityScore * 0.15
+      )
+    );
+
+    const reasonCodes = [];
+
+    if (lexicalScore >= 0.25) {
+      reasonCodes.push('TOPIC_MATCH');
+    }
+
+    if (qualityScore >= 0.85) {
+      reasonCodes.push('PRIMARY_OR_HIGH_QUALITY_SOURCE');
+    }
+
+    if (configuredBlocked) {
+      reasonCodes.push('BLOCKED_DOMAIN');
+    }
+
+    if (isSearchWrapper) {
+      reasonCodes.push('SEARCH_RESULT_WRAPPER');
+    }
+
+    if (relevanceScore < config.thresholds.min_relevance) {
+      reasonCodes.push('LOW_RELEVANCE');
+    }
+
+    const shouldExtract =
+      !blocked &&
+      relevanceScore >= config.thresholds.min_relevance &&
+      qualityScore >= config.thresholds.min_source_quality;
+
+    const candidate = {
+      candidate_id:
+        result.id ||
+        `tavily:${responseIndex}:${resultIndex}`,
+
+      config,
+
+      workspace_id: config.workspace_id,
+      workspace_domain_id: config.workspace_domain_id,
+      research_run_id: seed.research_run_id,
+      request_id: seed.request_id,
+
+      discovery_channel: 'web_search',
+      discovery_provider: 'tavily',
+      discovery_queries: [queryContext.query].filter(Boolean),
+      query: queryContext.query ?? responseQuery,
+      query_intent: queryContext.intent ?? 'current_news',
+      result_rank: resultIndex + 1,
+      discovered_at: new Date().toISOString(),
+
+      original_url: originalUrl,
+      canonical_url: canonicalUrl,
+      title,
+      snippet,
+
+      publisher: hostname,
+      author: null,
+      published_at: result.published_date ?? null,
+      language: 'en',
+
+      source_type: determineSourceType(parsedUrl, title),
+      relevance_score: Number(relevanceScore.toFixed(3)),
+      source_quality_score: Number(qualityScore.toFixed(3)),
+      tavily_score: Number(tavilyScore.toFixed(3)),
+
+      reason_codes: reasonCodes,
+      should_extract: shouldExtract,
+
+      provider_request_id: payload.request_id ?? null
+    };
+
+    const existing = deduplicated.get(canonicalUrl);
+
+    if (!existing) {
+      deduplicated.set(canonicalUrl, candidate);
+      return;
+    }
+
+    const combinedQueries = [
+      ...new Set([
+        ...(existing.discovery_queries ?? []),
+        ...candidate.discovery_queries
+      ])
+    ];
+
+    if (candidate.relevance_score > existing.relevance_score) {
+      candidate.discovery_queries = combinedQueries;
+      deduplicated.set(canonicalUrl, candidate);
+    } else {
+      existing.discovery_queries = combinedQueries;
+    }
+  });
+});
+
+let candidates = [...deduplicated.values()]
+  .sort(
+    (a, b) =>
+      Number(b.should_extract) - Number(a.should_extract) ||
+      b.relevance_score - a.relevance_score ||
+      b.source_quality_score - a.source_quality_score
+  )
+  .slice(0, config.limits.max_candidates);
+
+if (!candidates.length) {
+  candidates = [{
+    candidate_id: 'no-results',
+    config,
+    workspace_id: config.workspace_id,
+    workspace_domain_id: config.workspace_domain_id,
+    research_run_id: seed.research_run_id,
+    request_id: seed.request_id,
+    canonical_url: null,
+    original_url: null,
+    title: 'No usable Tavily results',
+    should_extract: false,
+    reason_codes: ['NO_SEARCH_RESULTS'],
+    discovery_provider_errors: providerErrors,
+    relevance_score: 0,
+    source_quality_score: 0
+  }];
+}
+
+return candidates.map(candidate => ({
+  json: candidate
+}));

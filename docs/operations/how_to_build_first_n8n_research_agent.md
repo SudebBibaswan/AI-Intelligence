@@ -20,11 +20,16 @@ RE 00 Orchestrator
         +--> RE 10 Plan
         +--> RE 21 Discover Search
         +--> RE 30 Candidate Gate
-        +--> RE 40 Extract
-        +--> RE 50 Content Gate
-        +--> RE 80 Persist Source
-        +--> RE 60 Extract Evidence
-        +--> RE 80 Persist Evidence
+        |       |
+        |       +--> duplicate/rejected with valid URL --> RE 80 Persist Source Ledger
+        |       +--> malformed URL --> metrics only
+        |       |
+        |       +--> new/reviewable
+        |                +--> RE 40 Extract
+        |                +--> RE 50 Content Gate
+        |                +--> RE 80 Persist Source
+        |                +--> RE 60 Extract Evidence
+        |                +--> RE 80 Persist Evidence
         +--> RE 90 Finalize
 ```
 
@@ -145,6 +150,7 @@ values (
     'engine_version', 'research-engine-v0.1.0',
     'query_set_version', 'ai-query-set-v0.1.0',
     'prompt_version', 'evidence-v0.1.0',
+    'evidence_model', 'gpt-4o-mini',
     'limits', jsonb_build_object(
       'max_queries', 1,
       'max_results_per_query', 3,
@@ -344,8 +350,8 @@ Body:
   "search_depth": "basic",
   "max_results": "={{ $json.max_results }}",
   "topic": "={{ $json.topic }}",
-  "start_date": "={{ $json.time_window.from ? DateTime.fromISO($json.time_window.from).toFormat('yyyy-MM-dd') : null }}",
-  "end_date": "={{ $json.time_window.to ? DateTime.fromISO($json.time_window.to).toFormat('yyyy-MM-dd') : null }}",
+  "start_date": "={{ $json.time_window.from ? $json.time_window.from.slice(0, 10) : null }}",
+  "end_date": "={{ $json.time_window.to ? $json.time_window.to.slice(0, 10) : null }}",
   "include_published_date": true,
   "filter_by_published_date": false,
   "include_answer": false,
@@ -515,7 +521,27 @@ Enable **Always Output Data** so a zero-row result does not stop the workflow.
 
 ### Mark Existing or New
 
-If a row was found, set:
+Add a Code node named `Mark Existing or New`. The Supabase lookup replaces the visible item data, so explicitly recover the candidate through n8n item linking:
+
+```javascript
+const candidate = $('Normalize and Canonicalize').item.json;
+const lookup = $json;
+const existingId = lookup?.id ?? null;
+
+return {
+  json: {
+    ...candidate,
+    existing_source_id: existingId,
+    skip_extraction: Boolean(existingId),
+    decision: existingId ? 'duplicate' : candidate.decision,
+    reason_codes: existingId
+      ? [...new Set([...(candidate.reason_codes ?? []), 'DUPLICATE_CANONICAL_URL'])]
+      : candidate.reason_codes,
+  },
+};
+```
+
+If a row was found, the output becomes:
 
 ```text
 decision = duplicate
@@ -582,6 +608,33 @@ provider_metadata  = bounded request ID, status, and warning fields only
 ```
 
 Do not retain response headers, authorization data, screenshots, raw HTML, or unbounded provider payloads.
+
+Use this Code node, named `Normalize Extraction Result`, in **Run Once for Each Item** mode:
+
+```javascript
+const candidate = $('Pages').item.json;
+const response = $json;
+const data = response.data ?? {};
+const metadata = data.metadata ?? {};
+const markdown = String(data.markdown ?? '');
+
+return {
+  json: {
+    ...candidate,
+    content_text: markdown,
+    extraction_method: 'firecrawl-v2-markdown',
+    extracted_at: new Date().toISOString(),
+    content_status: markdown.trim() ? 'success' : 'failed',
+    publisher: candidate.publisher ?? metadata.ogSiteName ?? null,
+    author: candidate.author ?? metadata.author ?? null,
+    published_at: candidate.published_at ?? metadata.publishedTime ?? null,
+    provider_metadata: {
+      warning: response.warning ?? null,
+      status_code: metadata.statusCode ?? null,
+    },
+  },
+};
+```
 
 ## Step 8: Build `RE 50 Content Gate`
 
@@ -765,6 +818,16 @@ Body:
 
 The function enforces workspace lineage, canonical URL and content-hash deduplication, and `review_only` mode. It returns the canonical `source_id`, match type, decision, and whether the source was new.
 
+Immediately after the RPC, add a Merge node named `Merge Canonical Source Context`:
+
+```text
+Input 1: the full content-gate item before RE 80
+Input 2: the n8n_record_research_source RPC result
+Mode: Combine by Position
+```
+
+Keep the canonical `source_id` returned by the RPC and the `content_text` from Input 1. Evidence extraction needs both. Do not keep using the temporary source UUID if the RPC matched an existing canonical source.
+
 ### Evidence branch
 
 Call:
@@ -791,6 +854,7 @@ Do not use an autonomous AI Agent node. Use one bounded structured-output call p
 When Executed by Another Workflow
   -> IF: Eligible for Evidence
   -> Crypto: Generate Model Request UUID
+  -> Edit Fields: Evidence Input
   -> HTTP Request or OpenAI node: Structured Evidence Extraction
   -> Code: Parse Structured Response
   -> Code: Verify Excerpts
@@ -810,7 +874,7 @@ run cost and evidence limits are not exhausted
 
 ### Model instructions
 
-Use the currently approved low-cost model that supports Structured Outputs. Store its exact model ID in run configuration and `llm_usage`; do not bury it only inside the node.
+Use the model stored in `research_run.config_snapshot.evidence_model`. The development seed uses `gpt-4o-mini` because it supports Structured Outputs; replace it only through a versioned configuration change after benchmarking. Store the exact returned/requested model ID in `llm_usage`; do not bury it only inside the node.
 
 Use these instructions:
 
@@ -870,6 +934,68 @@ Use a strict JSON Schema equivalent to:
   },
   "required": ["items"]
 }
+```
+
+### OpenAI Responses request
+
+Configure an HTTP Request node:
+
+| Setting | Value |
+|---|---|
+| Method | `POST` |
+| URL | `https://api.openai.com/v1/responses` |
+| Authentication | Predefined OpenAI credential |
+| Credential | `research-dev-openai-models-v1` |
+| Body type | JSON |
+| Timeout | 60 seconds |
+| Retry on fail | Off for the first build; the workflow owns the one allowed retry |
+
+Set `model` from the claimed run configuration. Set `instructions` to the model instructions above. Set `input` to a single user message containing only the source title, URL, publication date, maximum item count, and bounded content. Configure `text.format` as:
+
+```json
+{
+  "type": "json_schema",
+  "name": "research_evidence_items",
+  "strict": true,
+  "schema": "PASTE_THE_SCHEMA_FROM_ABOVE"
+}
+```
+
+In the actual JSON body, replace `PASTE_THE_SCHEMA_FROM_ABOVE` with the schema object, not a string. Set a bounded `max_output_tokens`, initially `1500`, and do not attach tools, web search, file search, memory, or previous response IDs.
+
+Add a Code node named `Parse Structured Response`:
+
+```javascript
+const source = $('Evidence Input').item.json;
+const response = $json;
+const outputText = (response.output ?? [])
+  .flatMap((item) => item.content ?? [])
+  .find((content) => content.type === 'output_text')?.text;
+
+if (!outputText) {
+  throw new Error('OPENAI_STRUCTURED_OUTPUT_MISSING');
+}
+
+let parsed;
+try {
+  parsed = JSON.parse(outputText);
+} catch {
+  throw new Error('OPENAI_STRUCTURED_OUTPUT_INVALID_JSON');
+}
+
+if (!Array.isArray(parsed.items)) {
+  throw new Error('OPENAI_STRUCTURED_OUTPUT_ITEMS_MISSING');
+}
+
+return {
+  json: {
+    ...source,
+    items: parsed.items,
+    model_request_id: response.id ?? null,
+    model: response.model ?? source.evidence_model,
+    model_usage: response.usage ?? {},
+  },
+};
 ```
 
 ### Deterministic evidence verification
@@ -1009,13 +1135,34 @@ After `Claim Research Run`, add Execute Sub-workflow nodes in this order:
 RE 10 Plan
 RE 21 Discover Search - Tavily
 RE 30 Candidate Gate
-RE 40 Extract - Firecrawl
-RE 50 Content Gate
-RE 80 Persist, operation record_source
-RE 60 Evidence Extraction - OpenAI
-RE 80 Persist, operation record_evidence
+IF Canonical URL Present?
+  false -> count malformed rejection; do not call source persistence
+  true  -> IF New Candidate?
+           false -> RE 80 Persist, operation record_source
+           true  -> IF Extraction Budget Available?
+             false -> mark needs_review with BUDGET_LIMIT_REACHED
+                      -> RE 80 Persist, operation record_source
+             true  -> RE 40 Extract - Firecrawl
+                      -> RE 50 Content Gate
+                      -> RE 80 Persist, operation record_source
+                      -> Merge Canonical Source Context
+                      -> IF Content Eligible for Evidence?
+                           false -> finish candidate
+                           true  -> RE 60 Evidence Extraction - OpenAI
+                                    -> RE 80 Persist, operation record_evidence
+Merge candidate branches
 RE 90 Finalize
 ```
+
+`New Candidate?` is true only when all of these hold:
+
+```text
+skip_extraction = false
+decision is needs_review or accepted
+canonical_url is non-null
+```
+
+Rejected candidates with a valid canonical URL and canonical duplicates never enter `RE 40`, `RE 50`, or `RE 60`. Persist their discovery decision and include them in final metrics, but spend no extraction or model credits on them. A malformed candidate with no canonical URL cannot satisfy the `sources.canonical_url` contract, so count it in run metrics and diagnostics without calling `record_source`.
 
 For each child call:
 

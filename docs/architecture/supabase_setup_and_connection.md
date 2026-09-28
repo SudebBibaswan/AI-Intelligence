@@ -143,20 +143,7 @@ The frontend must not reconstruct intelligence lineage by joining unrestricted r
 
 ## Migration workflow after setup
 
-1. Create a migration:
-
-   ```powershell
-   supabase migration new short_change_name
-   ```
-
-2. Edit the new SQL file.
-3. Replay locally with `supabase db reset` when a container runtime is available.
-4. Run RLS and application tests.
-5. Preview remote changes with `supabase db push --dry-run`.
-6. Apply with `supabase db push`.
-7. Regenerate TypeScript types.
-
-Never make an untracked production schema change in the Dashboard. If an emergency Dashboard change occurs, immediately capture it with `supabase db pull` and review the resulting migration.
+The Supabase GitHub integration is the normal migration deployer. Create and test a new migration, commit it, and push it; do not apply schema SQL manually through the Dashboard. See [How to Apply Supabase Migrations](../operations/how_to_apply_supabase_migrations.md) for the complete create, local replay, dry-run, deployment, verification, and recovery procedure.
 
 ## Connection completion checklist
 
