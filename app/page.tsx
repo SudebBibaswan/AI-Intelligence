@@ -1,3 +1,3 @@
-import { HomePage } from "@/components/marketing/home-page";
+import { redirect } from "next/navigation";
 
-export default function RootPage() { return <HomePage />; }
+export default function RootPage() { redirect("/login"); }
