@@ -11,6 +11,21 @@ interface Domain {
   description: string;
 }
 
+async function readJsonResponse<T>(response: Response): Promise<Partial<T>> {
+  const body = await response.text();
+  if (!body) return {};
+
+  try {
+    return JSON.parse(body) as T;
+  } catch {
+    return {};
+  }
+}
+
+function redirectedToLogin(response: Response) {
+  return response.redirected && new URL(response.url).pathname === "/login";
+}
+
 function getInitials(name: string) {
   return name
     .split(/\s+/)
@@ -40,7 +55,12 @@ export function DomainPicker() {
           return;
         }
 
-        const result = await response.json();
+        if (redirectedToLogin(response)) {
+          router.replace("/login");
+          return;
+        }
+
+        const result = await readJsonResponse<{ domains: Domain[]; error: string }>(response);
         if (!response.ok) throw new Error(result.error || "Failed to load domains");
 
         const availableDomains = Array.isArray(result.domains) ? result.domains : [];
@@ -70,10 +90,16 @@ export function DomainPicker() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ domain_key: selected.key }),
       });
+
+      if (response.status === 401 || redirectedToLogin(response)) {
+        router.replace("/login");
+        return;
+      }
+
+      const result = await readJsonResponse<{ error: string }>(response);
       
       if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || "Failed to save domain");
+        throw new Error(result.error || `Failed to save domain (${response.status})`);
       }
       
       router.push("/onboarding/profile");

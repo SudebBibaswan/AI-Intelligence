@@ -21,38 +21,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'workspace_id required' }, { status: 400 })
     }
 
-    let query = supabase
+    // Fetch signals first
+    let signalsQuery = supabase
       .from('signals')
-      .select(`
-        *,
-        signal_evidence (
-          evidence_id,
-          role,
-          weight,
-          evidence:evidence_id (
-            id,
-            source_id,
-            claim_text,
-            excerpt,
-            confidence,
-            source:sources (
-              id,
-              title,
-              publisher,
-              canonical_url
-            )
-          )
-        ),
-        signal_entities (
-          entity_id,
-          role,
-          entity:entities (
-            id,
-            name,
-            entity_type
-          )
-        )
-      `)
+      .select('*')
       .eq('workspace_id', workspaceId)
       .eq('status', status)
       .order('importance_score', { ascending: false })
@@ -60,14 +32,78 @@ export async function GET(request: NextRequest) {
       .range(offset, offset + limit - 1)
 
     if (domainId) {
-      query = query.eq('workspace_domain_id', domainId)
+      signalsQuery = signalsQuery.eq('workspace_domain_id', domainId)
     }
 
-    const { data, error } = await query
+    const { data: signals, error: signalsError } = await signalsQuery
 
-    if (error) throw error
+    if (signalsError) throw signalsError
+    if (!signals || signals.length === 0) {
+      return NextResponse.json({ data: [], count: 0 })
+    }
 
-    return NextResponse.json({ data, count: data?.length || 0 })
+    const signalIds = signals.map(s => s.id)
+
+    // Fetch signal_evidence with evidence and sources in separate queries
+    const { data: signalEvidenceLinks, error: seError } = await supabase
+      .from('signal_evidence')
+      .select('signal_id, evidence_id, role, weight')
+      .in('signal_id', signalIds)
+      .eq('workspace_id', workspaceId)
+
+    if (seError) throw seError
+
+    // Fetch evidence for these signals
+    const evidenceIds = [...new Set(signalEvidenceLinks?.map(se => se.evidence_id) || [])]
+    let evidenceMap = new Map()
+    
+    if (evidenceIds.length > 0) {
+      const { data: evidenceData, error: evError } = await supabase
+        .from('evidence')
+        .select(`
+          id,
+          source_id,
+          claim_text,
+          excerpt,
+          confidence,
+          verification_status,
+          evidence_type,
+          source:sources (id, title, publisher, canonical_url)
+        `)
+        .in('id', evidenceIds)
+        .eq('workspace_id', workspaceId)
+
+      if (evError) throw evError
+      evidenceMap = new Map(evidenceData?.map(e => [e.id, e]) || [])
+    }
+
+    // Fetch signal_entities
+    const { data: signalEntities, error: sentError } = await supabase
+      .from('signal_entities')
+      .select('signal_id, entity_id, role, entity:entities (id, name, entity_type, canonical_url, attributes, resolution_status, wikidata_qid)')
+      .in('signal_id', signalIds)
+      .eq('workspace_id', workspaceId)
+
+    if (sentError) throw sentError
+
+    // Combine data
+    const signalsWithRelations = signals.map(signal => {
+      const evidenceLinks = signalEvidenceLinks?.filter(se => se.signal_id === signal.id) || []
+      const entities = signalEntities?.filter(se => se.signal_id === signal.id) || []
+      
+      return {
+        ...signal,
+        signal_evidence: evidenceLinks.map(link => ({
+          evidence_id: link.evidence_id,
+          role: link.role,
+          weight: link.weight,
+          evidence: evidenceMap.get(link.evidence_id) || null
+        })).filter(se => se.evidence !== null),
+        signal_entities: entities
+      }
+    })
+
+    return NextResponse.json({ data: signalsWithRelations, count: signalsWithRelations.length })
   } catch (error) {
     console.error('Signals API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

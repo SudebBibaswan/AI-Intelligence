@@ -22,57 +22,96 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'workspace_id required' }, { status: 400 })
     }
 
-    // Get sources with evidence
-    let query = supabase
+    // Fetch sources first
+    let sourcesQuery = supabase
       .from('sources')
-      .select(`
-        *,
-        evidence:evidence_id (
-          id,
-          claim_text,
-          excerpt,
-          confidence,
-          polarity,
-          verification_status,
-          evidence_type,
-          entities:evidence_entities (
-            entity:entities (id, name, entity_type)
-          )
-        ),
-        research_run_sources!research_run_sources_source_id_fkey (
-          research_run:research_runs!research_run_sources_research_run_id_fkey (
-            id,
-            trigger_type,
-            created_at
-          )
-        )
-      `)
+      .select('*')
       .eq('workspace_id', workspaceId)
       .is('deleted_at', null)
       .order('first_discovered_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
-    if (domainId) {
-      // Filter by workspace_domain through research_runs
-      query = query.filter('research_run_sources.research_run.workspace_domain_id', 'eq', domainId)
+    if (sourceType) {
+      sourcesQuery = sourcesQuery.eq('source_type', sourceType)
     }
 
-    if (sourceType) {
-      query = query.eq('source_type', sourceType)
+    const { data: sources, error: sourcesError } = await sourcesQuery
+
+    if (sourcesError) throw sourcesError
+    if (!sources || sources.length === 0) {
+      return NextResponse.json({ data: [], count: 0 })
     }
+
+    const sourceIds = sources.map(s => s.id)
+
+    // Fetch evidence for these sources
+    let evidenceQuery = supabase
+      .from('evidence')
+      .select(`
+        id,
+        source_id,
+        claim_text,
+        excerpt,
+        confidence,
+        polarity,
+        verification_status,
+        evidence_type,
+        entities:evidence_entities (entity:entities (id, name, entity_type))
+      `)
+      .in('source_id', sourceIds)
+      .eq('workspace_id', workspaceId)
 
     if (verificationStatus) {
-      query = query.filter('evidence.verification_status', 'eq', verificationStatus)
+      evidenceQuery = evidenceQuery.eq('verification_status', verificationStatus)
     }
 
-    const { data, error } = await query
+    const { data: evidence, error: evError } = await evidenceQuery
 
-    if (error) throw error
+    if (evError) throw evError
+
+    // Group evidence by source_id
+    const evidenceBySource = new Map()
+    evidence?.forEach(e => {
+      if (!evidenceBySource.has(e.source_id)) {
+        evidenceBySource.set(e.source_id, [])
+      }
+      evidenceBySource.get(e.source_id).push(e)
+    })
+
+    // Fetch research_run_sources for trigger_type
+    const { data: rrsData, error: rrsError } = await supabase
+      .from('research_run_sources')
+      .select(`
+        source_id,
+        research_run:research_runs (id, trigger_type, workspace_domain_id)
+      `)
+      .in('source_id', sourceIds)
+
+    if (rrsError) throw rrsError
+
+    const rrsBySource = new Map()
+    rrsData?.forEach(rrs => {
+      if (!rrsBySource.has(rrs.source_id)) {
+        rrsBySource.set(rrs.source_id, [])
+      }
+      rrsBySource.get(rrs.source_id).push(rrs)
+    })
+
+    // Filter by domain if needed
+    let filteredSources = sources
+    if (domainId) {
+      filteredSources = sources.filter(source => {
+        const rrs = rrsBySource.get(source.id) || []
+        return rrs.some((r: any) => r.research_run?.workspace_domain_id === domainId)
+      })
+    }
 
     // Transform sources into feed items
-    const feedItems = (data || []).map((source: any) => {
-      const verifiedEvidence = source.evidence?.filter((e: any) => e.verification_status === 'verified') || []
-      const totalEvidence = source.evidence?.length || 0
+    const feedItems = filteredSources.map((source: any) => {
+      const sourceEvidence = evidenceBySource.get(source.id) || []
+      const verifiedEvidence = sourceEvidence.filter((e: any) => e.verification_status === 'verified')
+      const totalEvidence = sourceEvidence.length
+      const rrs = rrsBySource.get(source.id) || []
       
       return {
         id: source.id,
@@ -88,8 +127,8 @@ export async function GET(request: NextRequest) {
         evidenceCount: totalEvidence,
         verifiedEvidenceCount: verifiedEvidence.length,
         topClaims: verifiedEvidence.slice(0, 3).map((e: any) => e.claim_text),
-        entities: source.evidence?.flatMap((e: any) => e.entities?.map((ee: any) => ee.entity)) || [],
-        triggerType: source.research_run_sources?.[0]?.research_run?.trigger_type,
+        entities: sourceEvidence.flatMap((e: any) => e.entities?.map((ee: any) => ee.entity) || []),
+        triggerType: rrs[0]?.research_run?.trigger_type,
       }
     })
 

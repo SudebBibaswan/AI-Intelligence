@@ -21,6 +21,7 @@ export function PhoneOtpForm({ mode = "login" }: { mode?: AuthMode }) {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   
   const continueTo = isSignup ? "/onboarding" : "/workspace";
   const canSubmit = isSignup ? email.includes("@") && password.length >= 8 : email.includes("@") && password.length > 0;
@@ -31,10 +32,11 @@ export function PhoneOtpForm({ mode = "login" }: { mode?: AuthMode }) {
     
     setLoading(true);
     setError(null);
+    setNotice(null);
     
     try {
       if (isSignup) {
-        const { error } = await supabase.auth.signUp({
+        const { data: signUpData, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -43,6 +45,11 @@ export function PhoneOtpForm({ mode = "login" }: { mode?: AuthMode }) {
           }
         });
         if (error) throw error;
+
+        if (!signUpData.session) {
+          setNotice("Account created. Confirm the email we sent you, then continue to onboarding.");
+          return;
+        }
         
         router.push("/onboarding");
         router.refresh();
@@ -150,6 +157,12 @@ export function PhoneOtpForm({ mode = "login" }: { mode?: AuthMode }) {
                   <div className="mt-4 rounded-md border border-[#7a4b4b] bg-[#381818] p-3 text-sm text-[#e89696] flex items-center gap-2">
                     <AlertCircle size={14} />
                     {error}
+                  </div>
+                )}
+
+                {notice && (
+                  <div className="mt-4 rounded-md border border-[#425f58] bg-[#142b27] p-3 text-sm text-[#9ad8c8]">
+                    {notice}
                   </div>
                 )}
                 

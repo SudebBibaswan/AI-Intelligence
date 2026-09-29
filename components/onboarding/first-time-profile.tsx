@@ -8,6 +8,17 @@ import { useState } from "react";
 const roles = ["Student", "Founder", "Working professional", "Investor / analyst", "Researcher"];
 const goals = ["Track AI investments", "Spot emerging patterns", "Research companies", "Develop a market thesis"];
 
+async function readJsonResponse(response: Response): Promise<{ error?: string }> {
+  const body = await response.text();
+  if (!body) return {};
+
+  try {
+    return JSON.parse(body) as { error?: string };
+  } catch {
+    return {};
+  }
+}
+
 export function FirstTimeProfile() {
   const router = useRouter();
   const [role, setRole] = useState("Student");
@@ -37,10 +48,16 @@ export function FirstTimeProfile() {
           interest: goal 
         }),
       });
+
+      if (response.status === 401 || (response.redirected && new URL(response.url).pathname === "/login")) {
+        router.replace("/login");
+        return;
+      }
+
+      const result = await readJsonResponse(response);
       
       if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || "Failed to save profile");
+        throw new Error(result.error || `Failed to save profile (${response.status})`);
       }
       
       router.push("/workspace");
@@ -114,7 +131,7 @@ export function FirstTimeProfile() {
             <div className="flex items-center gap-3">
               <MessageSquareText size={17} className="text-[#aeb6ff]" />
               <div>
-                <h2 className="text-sm font-semibold">What's your primary goal?</h2>
+                <h2 className="text-sm font-semibold">What&apos;s your primary goal?</h2>
                 <p className="mt-1 text-xs text-[#a5abc9]">This shapes your initial brief and suggestions.</p>
               </div>
             </div>
