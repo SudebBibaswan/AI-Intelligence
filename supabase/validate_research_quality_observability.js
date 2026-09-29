@@ -4,6 +4,14 @@ const path = require('path');
 const migration = fs.readFileSync(path.join(__dirname, 'migrations', '202609270010_research_quality_observability.sql'), 'utf8');
 const snapshotsMigration = fs.readFileSync(path.join(__dirname, 'migrations', '202609290001_research_quality_snapshots.sql'), 'utf8');
 const failures = [];
+const migrationVersions = new Map();
+for (const filename of fs.readdirSync(path.join(__dirname, 'migrations'))) {
+  const version = filename.match(/^(\d+)_.*\.sql$/)?.[1];
+  if (!version) continue;
+  const existing = migrationVersions.get(version);
+  if (existing) failures.push(`Duplicate migration version ${version}: ${existing}, ${filename}`);
+  else migrationVersions.set(version, filename);
+}
 const requiredViews = [
   'v_research_quality_runs',
   'v_research_provider_quality',
