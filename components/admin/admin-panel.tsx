@@ -228,6 +228,18 @@ export function AdminPanel() {
       Object.values(signal).join(" ").toLowerCase().includes(query.toLowerCase())
     ), [signalReviews, query]);
 
+  const handleSignalReviewed = (signalId: string) => {
+    setSignalReviews(current => current.filter(signal => signal.signal_id !== signalId));
+    setOverview(current => current ? {
+      ...current,
+      draftSignalsCount: Math.max(0, current.draftSignalsCount - 1),
+      signalStatus: {
+        ...current.signalStatus,
+        draft: Math.max(0, current.signalStatus.draft - 1),
+      },
+    } : current);
+  };
+
   if (workspaceLoading) return <div className="space-y-9 p-6">Loading workspace...</div>;
   if (!workspace) return <div className="space-y-9 p-6">Please complete onboarding to set up your workspace.</div>;
 
@@ -284,7 +296,7 @@ export function AdminPanel() {
       )}
 
       {tab === "Overview" && <Overview data={overview} loading={loading["Overview"]} range={range} />}
-      {tab === "Signal Review" && <SignalReviewTab data={filteredSignals} loading={loading["Signal Review"]} error={errors["Signal Review"]} />}
+      {tab === "Signal Review" && <SignalReviewTab data={filteredSignals} loading={loading["Signal Review"]} error={errors["Signal Review"]} onReviewed={handleSignalReviewed} />}
       {tab === "Workflow Runs" && <WorkflowRunsTab data={filteredRuns} loading={loading["Workflow Runs"]} error={errors["Workflow Runs"]} query={query} setQuery={setQuery} />}
       {tab === "AI Usage" && <UsageTab data={aiUsage} loading={loading["AI Usage"]} range={range} />}
       {tab === "Requests & Errors" && <RequestsTab data={filteredRequests} loading={loading["Requests & Errors"]} query={query} setQuery={setQuery} />}
@@ -348,7 +360,7 @@ function Overview({ data, loading, range }: { data: OverviewData | null; loading
   );
 }
 
-function SignalReviewTab({ data, loading, error }: { data: SignalReviewItem[]; loading: boolean; error?: string | null }) {
+function SignalReviewTab({ data, loading, error, onReviewed }: { data: SignalReviewItem[]; loading: boolean; error?: string | null; onReviewed: (signalId: string) => void }) {
   if (loading) return <div className="space-y-9 p-6">Loading signal review queue...</div>;
   if (error) return <div className="space-y-9 p-6">Error: {error}</div>;
 
@@ -426,7 +438,7 @@ function SignalReviewTab({ data, loading, error }: { data: SignalReviewItem[]; l
                     {new Date(signal.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3">
-                    <SignalReviewActions signal={signal} />
+                    <SignalReviewActions signal={signal} onReviewed={onReviewed} />
                   </td>
                 </tr>
               ))}
@@ -438,7 +450,7 @@ function SignalReviewTab({ data, loading, error }: { data: SignalReviewItem[]; l
   );
 }
 
-function SignalReviewActions({ signal }: { signal: SignalReviewItem }) {
+function SignalReviewActions({ signal, onReviewed }: { signal: SignalReviewItem; onReviewed: (signalId: string) => void }) {
   const [reviewing, setReviewing] = useState<{ decision: 'accepted' | 'rejected'; reason: string } | null>(null);
 
   const handleReview = async (decision: 'accepted' | 'rejected', reason?: string) => {
@@ -449,9 +461,12 @@ function SignalReviewActions({ signal }: { signal: SignalReviewItem }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ signal_id: signal.signal_id, decision, request_id: requestId, reason })
       });
-      if (!response.ok) throw new Error('Failed to review signal');
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error || `Failed to review signal (${response.status})`);
+      }
+      onReviewed(signal.signal_id);
       alert(`${decision.toUpperCase()} signal ${signal.signal_id.slice(0, 8)}...`);
-      // In a real app, you'd refresh the data here
     } catch (err) {
       alert('Failed to review signal: ' + (err instanceof Error ? err.message : 'Unknown error'));
     }
