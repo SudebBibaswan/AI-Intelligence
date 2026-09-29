@@ -1,7 +1,7 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-const publicPaths = ['/login', '/signup', '/onboarding', '/onboarding/profile']
+const publicPaths = ['/login', '/signup']
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -17,7 +17,7 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           supabaseResponse = NextResponse.next({
             request,
           })
@@ -34,8 +34,13 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   const isPublicPath = publicPaths.some((path) => request.nextUrl.pathname.startsWith(path))
+  const isApiPath = request.nextUrl.pathname.startsWith('/api/')
 
   if (!user && !isPublicPath) {
+    if (isApiPath) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
@@ -45,20 +50,6 @@ export async function middleware(request: NextRequest) {
     const url = request.nextUrl.clone()
     url.pathname = '/workspace'
     return NextResponse.redirect(url)
-  }
-
-  if (user && request.nextUrl.pathname === '/onboarding') {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('onboarding_state')
-      .eq('user_id', user.id)
-      .single()
-
-    if (profile?.onboarding_state === 'complete') {
-      const url = request.nextUrl.clone()
-      url.pathname = '/workspace'
-      return NextResponse.redirect(url)
-    }
   }
 
   return supabaseResponse

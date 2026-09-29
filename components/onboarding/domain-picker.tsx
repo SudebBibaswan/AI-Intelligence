@@ -2,32 +2,65 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, Globe2, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { ArrowRight, Check, Globe2 } from "lucide-react";
+import { useEffect, useState } from "react";
 
 interface Domain {
   key: string;
   name: string;
   description: string;
-  initials: string;
 }
 
-const domains: Domain[] = [
-  { key: "artificial-intelligence", name: "Artificial Intelligence", description: "Models, agents, infrastructure, evaluation", initials: "AI" },
-  { key: "financial-technology", name: "Financial Technology", description: "Payments, credit, wealth, financial infrastructure", initials: "FT" },
-  { key: "climate-energy", name: "Climate & Energy", description: "Grid, carbon, industrial transition", initials: "CE" },
-  { key: "healthcare", name: "Healthcare", description: "Care delivery, biotech, health infrastructure", initials: "HC" },
-  { key: "enterprise-software", name: "Enterprise Software", description: "Workflows, security, data, automation", initials: "ES" },
-  { key: "consumer-internet", name: "Consumer Internet", description: "Commerce, media, creator and community products", initials: "CI" },
-];
+function getInitials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join("")
+    .toUpperCase();
+}
 
 export function DomainPicker() {
   const router = useRouter();
-  const [selected, setSelected] = useState<typeof domains[0]>(domains[0]);
+  const [domains, setDomains] = useState<Domain[]>([]);
+  const [selected, setSelected] = useState<Domain | null>(null);
+  const [domainsLoading, setDomainsLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    let active = true;
+
+    async function loadDomains() {
+      try {
+        const response = await fetch("/api/onboarding/domain");
+        if (response.status === 401) {
+          router.replace("/login");
+          return;
+        }
+
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Failed to load domains");
+
+        const availableDomains = Array.isArray(result.domains) ? result.domains : [];
+        if (!active) return;
+        setDomains(availableDomains);
+        setSelected(availableDomains[0] ?? null);
+        if (availableDomains.length === 0) setError("No active domains are configured yet.");
+      } catch (err) {
+        if (active) setError(err instanceof Error ? err.message : "Failed to load domains");
+      } finally {
+        if (active) setDomainsLoading(false);
+      }
+    }
+
+    loadDomains();
+    return () => { active = false; };
+  }, [router]);
+
   const handleContinue = async () => {
+    if (!selected || loading) return;
     setLoading(true);
     setError(null);
     
@@ -70,10 +103,16 @@ export function DomainPicker() {
           Your domain determines the sources, topics, investment activity, and emerging patterns your workspace tracks. You can refine this later.
         </p>
         <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {domains.map((domain) => (
+          {domainsLoading && (
+            <div className="col-span-full rounded-lg border border-[#30345f] bg-[#10142d] p-8 text-sm text-[#a5abc9]">
+              Loading available domains...
+            </div>
+          )}
+          {!domainsLoading && domains.map((domain) => (
             <button
+              type="button"
               className={`relative min-h-44 rounded-lg border p-6 text-left transition hover:-translate-y-0.5 ${
-                selected.key === domain.key
+                selected?.key === domain.key
                   ? "border-[#7d83ff] bg-[#171c42] ring-1 ring-[#7d83ff]"
                   : "border-[#30345f] bg-[#10142d] hover:border-[#7076f6]"
               }`}
@@ -81,9 +120,9 @@ export function DomainPicker() {
               key={domain.key}
             >
               <span className="grid h-9 w-9 place-items-center rounded bg-[#20275a] font-mono text-xs font-semibold text-[#aeb6ff]">
-                {domain.initials}
+                {getInitials(domain.name)}
               </span>
-              {selected.key === domain.key && (
+              {selected?.key === domain.key && (
                 <span className="absolute right-5 top-5 grid h-5 w-5 place-items-center rounded-full bg-[#7076f6] text-white">
                   <Check size={13} />
                 </span>
@@ -106,8 +145,9 @@ export function DomainPicker() {
             <span>Your workspace will track this domain across global sources</span>
           </div>
           <button
+            type="button"
             onClick={handleContinue}
-            disabled={loading}
+            disabled={!selected || loading || domainsLoading}
             className={`inline-flex min-h-11 w-full sm:w-auto items-center justify-center gap-2 rounded-md px-4 text-xs font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${
               loading ? "bg-[#6c72f3] opacity-70" : "bg-[#6c72f3] hover:bg-[#8187ff]"
             }`}

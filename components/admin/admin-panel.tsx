@@ -213,9 +213,6 @@ export function AdminPanel() {
     }
   };
 
-  if (workspaceLoading) return <div className="space-y-9 p-6">Loading workspace...</div>;
-  if (!workspace) return <div className="space-y-9 p-6">Please complete onboarding to set up your workspace.</div>;
-
   const filteredRuns = useMemo(() => 
     workflowRuns.filter(run => 
       Object.values(run).join(" ").toLowerCase().includes(query.toLowerCase())
@@ -230,6 +227,9 @@ export function AdminPanel() {
     signalReviews.filter(signal => 
       Object.values(signal).join(" ").toLowerCase().includes(query.toLowerCase())
     ), [signalReviews, query]);
+
+  if (workspaceLoading) return <div className="space-y-9 p-6">Loading workspace...</div>;
+  if (!workspace) return <div className="space-y-9 p-6">Please complete onboarding to set up your workspace.</div>;
 
   return (
     <div className="space-y-7">
