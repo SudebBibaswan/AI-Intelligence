@@ -1,0 +1,395 @@
+{
+  "name": "RE14 - Evidence Human Review",
+  "nodes": [
+    {
+      "id": "c09d7b17-0000-4000-8000-93954b5d5a62",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        240
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "e3226c9b-0000-4000-8000-7c673b393df8",
+      "name": "Hourly Review Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b49071b8-0000-4000-8000-35ff07475ba5",
+      "name": "Review Engine Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: {\n  supabase_url: 'https://jaeltkzfjgrzgxgzxlfs.supabase.co',\n  workspace_id: 'a51b8277-4cd5-4f8a-9ffd-4ddbe56683da',\n  lookback_hours: 24,\n  batch_size: 50,\n  engine_version: 'evidence-review-engine-v1.0.0'\n} }];"
+      }
+    },
+    {
+      "id": "814b9270-0000-4000-8000-d19ba452046a",
+      "name": "Load Review Queue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.supabase_url + '/rest/v1/v_evidence_review_queue' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "workspace_id",
+              "value": "={{ $json.workspace_id }}"
+            },
+            {
+              "name": "order",
+              "value": "created_at.asc"
+            },
+            {
+              "name": "limit",
+              "value": "={{ $json.batch_size }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "f6df5ba6-0000-4000-8000-ceb0f3829edd",
+      "name": "Load Signal Eligible Evidence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.supabase_url + '/rest/v1/v_signal_eligible_evidence' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "workspace_id",
+              "value": "={{ $json.workspace_id }}"
+            },
+            {
+              "name": "order",
+              "value": "created_at.desc"
+            },
+            {
+              "name": "limit",
+              "value": "100"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "e5ef6b5d-0000-4000-8000-805d22134ac6",
+      "name": "Load Capital Directory",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        600
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.supabase_url + '/rest/v1/v_capital_directory' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "workspace_id",
+              "value": "={{ $json.workspace_id }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "16056a0b-0000-4000-8000-4ff627bd8e37",
+      "name": "Process Review Queue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const config = $('Review Engine Configuration').first().json;\nconst queue = $input.all().flatMap((item) => Array.isArray(item.json) ? item.json : [item.json])\n  .filter(r => r.workspace_id === config.workspace_id);\nconst eligible = $input.all().flatMap((item) => Array.isArray(item.json) ? item.json : [item.json])\n  .filter(r => r.workspace_id === config.workspace_id);\nconst capital = $input.all().flatMap((item) => Array.isArray(item.json) ? item.json : [item.json])\n  .filter(r => r.workspace_id === config.workspace_id);\n\nconst pendingReview = queue.length;\nconst highConfidencePending = queue.filter(r => Number(r.confidence || 0) >= 0.8).length;\nconst disputedCount = queue.filter(r => r.verification_status === 'disputed').length;\nconst signalReady = eligible.length;\n\nconst capitalActive = capital.filter(c => c.activity_status === 'active_evidenced').length;\nconst capitalEvidenced = capital.filter(c => c.activity_status === 'evidenced').length;\nconst capitalCandidates = capital.filter(c => c.activity_status === 'candidate_unverified').length;\n\nreturn [{ json: {\n  config,\n  review_queue: queue.slice(0, 20),\n  summary: {\n    pending_review: pendingReview,\n    high_confidence_pending: highConfidencePending,\n    disputed_count: disputedCount,\n    signal_ready_evidence: signalReady,\n    capital_active_evidenced: capitalActive,\n    capital_evidenced: capitalEvidenced,\n    capital_candidates: capitalCandidates,\n  },\n} }];"
+      }
+    },
+    {
+      "id": "5e7d55f7-0000-4000-8000-2e5f3dbfcab6",
+      "name": "Has Pending Reviews?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b19b3176-0000-4000-8000-3ab267b8b66d",
+              "leftValue": "={{ $json.summary.pending_review > 0 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a754177e-0000-4000-8000-751ff5ed96a8",
+      "name": "Review Queue Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const data = $('Process Review Queue').item.json;\nreturn [{ json: { status: 'completed',\n  pending_reviews: data.summary.pending_review,\n  high_confidence: data.summary.high_confidence_pending,\n  disputed: data.summary.disputed_count,\n  signal_ready: data.summary.signal_ready_evidence,\n  capital_active: data.summary.capital_active_evidenced,\n  capital_evidenced: data.summary.capital_evidenced,\n  capital_candidates: data.summary.capital_candidates,\n  note: 'Evidence review queue processed. Frontend can query v_evidence_review_queue for actionable items. Capital directory available in v_capital_directory.' } }];"
+      }
+    },
+    {
+      "id": "06e31e33-0000-4000-8000-5a5c1758f781",
+      "name": "No Reviews Pending",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        400
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const data = $('Process Review Queue').item.json;\nreturn [{ json: { status: 'completed',\n  pending_reviews: 0,\n  high_confidence: 0,\n  disputed: 0,\n  signal_ready: data.summary.signal_ready_evidence,\n  capital_active: data.summary.capital_active_evidenced,\n  capital_evidenced: data.summary.capital_evidenced,\n  capital_candidates: data.summary.capital_candidates,\n  note: 'No evidence pending review. Capital directory available in v_capital_directory.' } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Review Engine Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hourly Review Check": {
+      "main": [
+        [
+          {
+            "node": "Review Engine Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Review Engine Configuration": {
+      "main": [
+        [
+          {
+            "node": "Load Review Queue",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Load Signal Eligible Evidence",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Load Capital Directory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Review Queue": {
+      "main": [
+        [
+          {
+            "node": "Process Review Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Signal Eligible Evidence": {
+      "main": [
+        [
+          {
+            "node": "Process Review Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Capital Directory": {
+      "main": [
+        [
+          {
+            "node": "Process Review Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Review Queue": {
+      "main": [
+        [
+          {
+            "node": "Has Pending Reviews?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Pending Reviews?": {
+      "main": [
+        [
+          {
+            "node": "Review Queue Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Reviews Pending",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "tags": [],
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionTimeout": 1800
+  }
+}

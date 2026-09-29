@@ -129,6 +129,7 @@ declare
   v_eligible_count integer;
   v_source_family_count integer;
   v_event_entity_count integer;
+  v_average_observation_confidence numeric;
   v_strength_score numeric := least(1, greatest(0, coalesce((p_pattern ->> 'strength_score')::numeric, 0)));
   v_persistence_score numeric := least(1, greatest(0, coalesce((p_pattern ->> 'persistence_score')::numeric, 0)));
   v_diversity_score numeric := least(1, greatest(0, coalesce((p_pattern ->> 'diversity_score')::numeric, 0)));
@@ -259,18 +260,23 @@ begin
     select * from checked_observations
     where invalid_signal_count = 0
   )
-  select count(*)
-  into v_eligible_count
+  select
+    count(*),
+    coalesce((
+      select count(distinct source_family.source_id)
+      from eligible_observations eligible
+      cross join lateral jsonb_array_elements_text(eligible.source_ids) as source_family(source_id)
+    ), 0),
+    coalesce(avg(eligible_observations.confidence), 0)
+  into
+    v_eligible_count,
+    v_source_family_count,
+    v_average_observation_confidence
   from eligible_observations;
 
   if v_eligible_count <> v_requested_count then
     raise exception using errcode = '22023', message = 'PATTERN_REQUIRES_ACCEPTED_AUTOMATED_OBSERVATIONS';
   end if;
-
-  select count(distinct source_id)
-  into v_source_family_count
-  from eligible_observations,
-  lateral jsonb_array_elements_text(source_ids) as src(source_id);
 
   if v_source_family_count < 3 then
     raise exception using errcode = '22023', message = 'PATTERN_REQUIRES_THREE_INDEPENDENT_SOURCE_FAMILIES';
@@ -288,8 +294,7 @@ begin
     raise exception using errcode = '22023', message = 'PATTERN_REQUIRES_TWO_DISTINCT_EVENTS_OR_ENTITIES';
   end if;
 
-  v_final_confidence := least(v_model_confidence,
-    coalesce((select avg(confidence) from eligible_observations), 0));
+  v_final_confidence := least(v_model_confidence, v_average_observation_confidence);
 
   v_dedupe_key := md5(concat_ws('|', v_workspace_domain_id::text, v_pattern_type,
     lower(regexp_replace(v_title, '[^a-z0-9]+', ' ', 'gi')),

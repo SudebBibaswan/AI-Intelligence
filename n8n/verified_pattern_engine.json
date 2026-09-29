@@ -88,7 +88,8 @@
       },
       "retryOnFail": true,
       "maxTries": 2,
-      "waitBetweenTries": 1000
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true
     },
     {
       "id": "d0e9688e-0000-4000-8000-c8afd912ea95",

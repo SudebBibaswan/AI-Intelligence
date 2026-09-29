@@ -1,0 +1,441 @@
+{
+  "name": "RE05 - Research Quality Observability",
+  "nodes": [
+    {
+      "id": "743eaa1c-0000-4000-8000-6620d21d6b7c",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        240
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "43e2fd44-0000-4000-8000-41846e5f2dc9",
+      "name": "Hourly Quality Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "16a85b15-0000-4000-8000-655ba87f2472",
+      "name": "Quality Engine Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: {\n  supabase_url: 'https://jaeltkzfjgrzgxgzxlfs.supabase.co',\n  workspace_id: 'a51b8277-4cd5-4f8a-9ffd-4ddbe56683da',\n  lookback_hours: 24,\n  model: 'gpt-6-luna',\n  engine_version: 'quality-engine-v1.0.0'\n} }];"
+      }
+    },
+    {
+      "id": "f429f4b5-0000-4000-8000-c350c5e0dc03",
+      "name": "Load Research Run Quality",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.supabase_url + '/rest/v1/v_research_quality_runs' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "workspace_id",
+              "value": "={{ $json.workspace_id }}"
+            },
+            {
+              "name": "created_at",
+              "value": "={{ \"gte.\" + (new Date(Date.now() - $json.lookback_hours * 3600000).toISOString()) }}"
+            },
+            {
+              "name": "order",
+              "value": "created_at.desc"
+            },
+            {
+              "name": "limit",
+              "value": "100"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "49fc8e7d-0000-4000-8000-e36426f3e9c5",
+      "name": "Load Provider Quality",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        350
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.supabase_url + '/rest/v1/v_research_provider_quality' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "workspace_id",
+              "value": "={{ $json.workspace_id }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "599cd33a-0000-4000-8000-ec8d3d648373",
+      "name": "Load Review Backlog",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        500
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.supabase_url + '/rest/v1/v_research_review_backlog' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "workspace_id",
+              "value": "={{ $json.workspace_id }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "db49b098-0000-4000-8000-19643e2e5fc7",
+      "name": "Load Capital Graph Health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        650
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.supabase_url + '/rest/v1/v_capital_graph_health' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "workspace_id",
+              "value": "={{ $json.workspace_id }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "6aade14b-0000-4000-8000-d1ec17e1bfeb",
+      "name": "Aggregate Quality Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        350
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const config = $('Quality Engine Configuration').first().json;\nconst runs = $input.all().flatMap((item) => Array.isArray(item.json) ? item.json : [item.json]);\nconst providers = $input.all().flatMap((item) => Array.isArray(item.json) ? item.json : [item.json]);\nconst backlog = $input.all().flatMap((item) => Array.isArray(item.json) ? item.json : [item.json]);\nconst graph = $input.all().flatMap((item) => Array.isArray(item.json) ? item.json : [item.json]);\n\nconst recentRuns = runs.filter(r => r.workspace_id === config.workspace_id);\nconst failedRuns = recentRuns.filter(r => r.status === 'failed').length;\nconst completedRuns = recentRuns.filter(r => r.status === 'completed').length;\nconst totalEvidence = recentRuns.reduce((sum, r) => sum + Number(r.evidence_count || 0), 0);\nconst totalVerified = recentRuns.reduce((sum, r) => sum + Number(r.verified_evidence || 0), 0);\nconst avgYield = recentRuns.length ? (recentRuns.reduce((sum, r) => sum + Number(r.source_to_evidence_yield || 0), 0) / recentRuns.length) : 0;\nconst totalCost = recentRuns.reduce((sum, r) => sum + Number(r.estimated_cost_usd || 0), 0);\nconst totalLlmCalls = recentRuns.reduce((sum, r) => sum + Number(r.llm_calls || 0), 0);\n\nconst providerStats = providers.filter(p => p.workspace_id === config.workspace_id);\nconst providerCount = providerStats.length;\nconst avgProviderQuality = providerStats.length ? (providerStats.reduce((sum, p) => sum + Number(p.average_source_quality || 0), 0) / providerStats.length) : 0;\nconst extractionSuccessRate = providerStats.length ? (providerStats.reduce((sum, p) => sum + Number(p.extraction_success_count || 0), 0) / providerStats.reduce((sum, p) => sum + Number(p.discovered_source_count || 0), 1)) : 0;\n\nconst backlogItems = backlog.filter(b => b.workspace_id === config.workspace_id).length;\nconst backlogEvidence = backlog.reduce((sum, b) => sum + Number(b.evidence_count || 0), 0);\n\nconst graphStats = graph.filter(g => g.workspace_id === config.workspace_id)[0] || {};\n\nreturn [{ json: {\n  config,\n  summary: {\n    period_hours: config.lookback_hours,\n    runs_completed: completedRuns,\n    runs_failed: failedRuns,\n    total_evidence: totalEvidence,\n    total_verified: totalVerified,\n    verification_rate: totalEvidence ? totalVerified / totalEvidence : 0,\n    source_to_evidence_yield: avgYield,\n    total_llm_calls: totalLlmCalls,\n    total_cost_usd: totalCost,\n    providers_monitored: providerCount,\n    avg_provider_quality: avgProviderQuality,\n    extraction_success_rate: extractionSuccessRate,\n    review_backlog_count: backlogItems,\n    review_backlog_evidence: backlogEvidence,\n    capital_entities: graphStats.capital_entity_count || 0,\n    capital_relationships: graphStats.capital_relationship_count || 0,\n    entity_provenance_coverage: graphStats.entity_provenance_coverage || 0,\n    relationship_provenance_coverage: graphStats.relationship_provenance_coverage || 0,\n  },\n  runs_detail: recentRuns.slice(0, 10),\n  providers_detail: providerStats,\n  backlog_detail: backlog.slice(0, 20),\n  graph_detail: graphStats,\n} }];"
+      }
+    },
+    {
+      "id": "c257f1a8-0000-4000-8000-aa377cc2d68a",
+      "name": "Store Quality Snapshot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        350
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Quality Engine Configuration').item.json.supabase_url + '/rest/v1/research_quality_snapshots' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workspace_id: $json.config.workspace_id, snapshot_at: new Date().toISOString(), metrics: $json.summary, runs_detail: $json.runs_detail, providers_detail: $json.providers_detail, backlog_detail: $json.backlog_detail, graph_detail: $json.graph_detail }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "62d68726-0000-4000-8000-608bb8421df8",
+      "name": "Quality Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        350
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const snap = $input.first().json ?? {};\nconst metrics = $('Aggregate Quality Metrics').item.json.summary ?? {};\nreturn [{ json: { status: 'completed',\n  workspace_id: metrics.workspace_id ?? snap.workspace_id,\n  snapshot_stored: !!snap.id,\n  period_hours: metrics.period_hours,\n  runs_completed: metrics.runs_completed,\n  runs_failed: metrics.runs_failed,\n  evidence_collected: metrics.total_evidence,\n  evidence_verified: metrics.total_verified,\n  verification_rate: Math.round((metrics.verification_rate || 0) * 10000) / 100,\n  source_yield: Math.round((metrics.source_to_evidence_yield || 0) * 10000) / 100,\n  cost_usd: Math.round((metrics.total_cost_usd || 0) * 1000000) / 1000000,\n  providers: metrics.providers_monitored,\n  backlog: metrics.review_backlog_count,\n  capital_entities: metrics.capital_entities,\n  note: 'Research quality snapshot stored. Dashboard can query research_quality_snapshots table.' } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Quality Engine Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hourly Quality Check": {
+      "main": [
+        [
+          {
+            "node": "Quality Engine Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quality Engine Configuration": {
+      "main": [
+        [
+          {
+            "node": "Load Research Run Quality",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Load Provider Quality",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Load Review Backlog",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Load Capital Graph Health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Research Run Quality": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Quality Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Provider Quality": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Quality Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Review Backlog": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Quality Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Capital Graph Health": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Quality Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Quality Metrics": {
+      "main": [
+        [
+          {
+            "node": "Store Quality Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Quality Snapshot": {
+      "main": [
+        [
+          {
+            "node": "Quality Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "tags": [],
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionTimeout": 1800
+  }
+}
