@@ -6,7 +6,7 @@ import { Signal } from "@/types/intelligence";
 
 export default function SignalsPage() {
   const workspaceId = typeof window !== 'undefined' ? localStorage.getItem('workspace_id') || '' : '';
-  const { signals, loading, error, mutate } = useSignals(workspaceId, undefined, 'draft', 100);
+  const { signals, isLoading: loading, error, mutate } = useSignals(workspaceId, undefined, 'draft', 100);
   const [reviewing, setReviewing] = useState<string | null>(null);
   const [reviewDecision, setReviewDecision] = useState<'accepted' | 'rejected'>('accepted');
 

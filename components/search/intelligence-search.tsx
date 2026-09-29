@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { Building2, Layers3, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { investmentDomains, investmentRounds } from "@/components/investments/investment-activity";
-import { patterns } from "@/lib/mock-data/dashboard";
+import { investmentDomains, investmentRounds, patterns } from "@/lib/mock-data/dashboard";
 
 type SearchItem = {
   category: "Investment" | "Pattern";

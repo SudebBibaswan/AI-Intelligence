@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Layers3 } from "lucide-react";
 import { fetchPatterns } from "@/lib/api/intelligence";
+import { demoPatterns } from "@/lib/mock-data/demo-intelligence";
 import { Pattern } from "@/types/intelligence";
 
 export function Patterns({ id }: { id?: string }) {
@@ -15,7 +16,10 @@ export function Patterns({ id }: { id?: string }) {
     async function loadPatterns() {
       try {
         const workspaceId = typeof window !== 'undefined' ? localStorage.getItem('workspace_id') || '' : '';
-        if (!workspaceId) throw new Error('No workspace selected');
+        if (!workspaceId) {
+          setPatterns(demoPatterns);
+          return;
+        }
         const { data } = await fetchPatterns({ workspace_id: workspaceId, limit: 100 });
         setPatterns(data);
       } catch (err) {
@@ -28,7 +32,7 @@ export function Patterns({ id }: { id?: string }) {
   }, []);
 
   if (loading) return <div className="space-y-9">Loading patterns...</div>;
-  if (error) return <div className="space-y-9">Error: {error}</div>;
+  if (error) return <div className="space-y-9"><p className="text-sm text-[#d0b2ed]">Live patterns could not load. Check the workspace connection and try again.</p></div>;
 
   if (id) {
     const pattern = patterns.find((p) => p.id === id) || patterns[0];
@@ -56,8 +60,8 @@ export function Patterns({ id }: { id?: string }) {
             <h2 className="mt-5 font-display text-3xl leading-tight group-hover:text-[#c2c7ff]">{item.statement}</h2>
             <div className="mt-7 grid grid-cols-3 border-t border-[#30345f] pt-4 font-mono text-[10px] text-[#a5abc9]">
               <span>{item.time_window_start ? new Date(item.time_window_start).toLocaleDateString() : 'N/A'} - {item.time_window_end ? new Date(item.time_window_end).toLocaleDateString() : 'N/A'}</span>
-              <span>{item.metadata?.observation_count || 0} observations</span>
-              <span>{(item.metadata?.has_contradictions || false) ? 'Has counter-signals' : '0 counter-signals'}</span>
+              <span>{(item.metadata?.observation_count as number | undefined) ?? 0} observations</span>
+              <span>{item.metadata?.has_contradictions === true ? 'Has counter-signals' : '0 counter-signals'}</span>
             </div>
           </Link>
         ))}
@@ -85,7 +89,7 @@ function PatternDetail({ pattern }: { pattern: Pattern }) {
         <div>
           <h2 className="text-lg font-semibold">Supporting observations</h2>
           <p className="mt-1 text-xs text-[#a5abc9]">
-            {pattern.metadata?.observation_count || 0} observations across {pattern.time_window_start ? new Date(pattern.time_window_start).toLocaleDateString() : 'N/A'} - {pattern.time_window_end ? new Date(pattern.time_window_end).toLocaleDateString() : 'N/A'}
+            {(pattern.metadata?.observation_count as number | undefined) ?? 0} observations across {pattern.time_window_start ? new Date(pattern.time_window_start).toLocaleDateString() : 'N/A'} - {pattern.time_window_end ? new Date(pattern.time_window_end).toLocaleDateString() : 'N/A'}
           </p>
           <div className="mt-4 space-y-3">
             {pattern.pattern_observations?.map((obs, index) => (
@@ -105,7 +109,7 @@ function PatternDetail({ pattern }: { pattern: Pattern }) {
           <section className="surface p-6">
             <p className="eyebrow">Counter-signals</p>
             <p className="mt-4 font-mono text-4xl text-[#d0b2ed]">
-              {pattern.metadata?.has_contradictions ? 'Present' : 'None'}
+              {pattern.metadata?.has_contradictions === true ? 'Present' : 'None'}
             </p>
             <p className="mt-2 text-sm leading-6 text-[#bfc3dc]">
               Incumbents may absorb this capability into broader platforms, reducing standalone category potential.

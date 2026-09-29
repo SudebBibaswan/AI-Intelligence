@@ -13,7 +13,7 @@ export default function CapitalFlowPage() {
     async function loadMappings() {
       try {
         const workspaceId = typeof window !== 'undefined' ? localStorage.getItem('workspace_id') || '' : '';
-        if (!workspaceId) throw new Error('No workspace selected');
+        if (!workspaceId) return;
         const { data } = await fetchCapitalFlow({ workspace_id: workspaceId, limit: 100 });
         setMappings(data);
       } catch (err) {
@@ -64,6 +64,7 @@ export default function CapitalFlowPage() {
                   {mapping.sector_tags?.join(', ') || 'No sectors'} · {mapping.stage_tags?.join(', ') || 'No stages'} · {mapping.geography_tags?.join(', ') || 'No geo'}
                 </p>
               </div>
+            </div>
             ))}
         </div>
       )}

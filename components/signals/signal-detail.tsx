@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowLeft, ArrowUpRight, Bookmark, CircleAlert, ExternalLink, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, CircleAlert, ExternalLink } from "lucide-react";
 import { fetchSignalById } from "@/lib/api/intelligence";
+import { IntelligenceActions } from "@/components/actions/intelligence-actions";
+import { demoSignals } from "@/lib/mock-data/demo-intelligence";
 import { Signal, SignalEvidence, SignalEntity } from "@/types/intelligence";
 
 export function SignalDetail({ id }: { id: string }) {
@@ -15,7 +17,10 @@ export function SignalDetail({ id }: { id: string }) {
     async function loadSignal() {
       try {
         const workspaceId = typeof window !== 'undefined' ? localStorage.getItem('workspace_id') || '' : '';
-        if (!workspaceId) throw new Error('No workspace selected');
+        if (!workspaceId) {
+          setSignal(demoSignals.find((item) => item.id === id) ?? demoSignals[0]);
+          return;
+        }
         const data = await fetchSignalById(id, workspaceId);
         if (!data) throw new Error('Signal not found');
         setSignal(data);
@@ -32,7 +37,7 @@ export function SignalDetail({ id }: { id: string }) {
     return <div className="space-y-9">Loading signal...</div>;
   }
   if (error || !signal) {
-    return <div className="space-y-9">Error: {error || 'Signal not found'}</div>;
+    return <div className="space-y-9"><Link href="/workspace" className="text-sm font-semibold text-[#aeb6ff] hover:underline">Back to workspace</Link><p className="text-sm text-[#d0b2ed]">This signal is unavailable right now. Check the workspace connection and try again.</p></div>;
   }
 
   return (
@@ -46,7 +51,7 @@ export function SignalDetail({ id }: { id: string }) {
           <span className="rounded border border-[#3b4378] bg-[#171c42] px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-[#b9c0ff]">
             {signal.topics[0] || 'general'}
           </span>
-          {signal.metadata.hasCounterEvidence && (
+          {signal.metadata.hasCounterEvidence === true && (
             <span className="inline-flex items-center gap-1 rounded border border-[#705779] bg-[#241a37] px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-[#d0b2ed]">
               <CircleAlert size={11} />Counter-evidence present
             </span>
@@ -104,13 +109,13 @@ export function SignalDetail({ id }: { id: string }) {
         </div>
         <aside className="space-y-6">
           <section className="surface p-6">
-            <p className="eyebrow">Confidence</h2>
+            <p className="eyebrow">Confidence</p>
             <h2 className="mt-3 font-mono text-4xl text-[#aeb6ff]">{Math.round((signal.confidence || 0) * 100)}%</h2>
             <p className="mt-3 text-sm leading-6 text-[#bfc3dc]">Based on evidence diversity, source quality, recency, and agreement across sources.</p>
             <div className="mt-6 space-y-3">
               {[
                 ["Evidence diversity", signal.signal_evidence?.length || 0],
-                ["Source quality", Math.round((signal.signal_evidence?.reduce((sum, e) => sum + e.evidence.confidence, 0) / (signal.signal_evidence?.length || 1)) * 100) || 0],
+                ["Source quality", Math.round(((signal.signal_evidence ?? []).reduce((sum, evidence) => sum + evidence.evidence.confidence, 0) / (signal.signal_evidence?.length || 1)) * 100) || 0],
                 ["Recency", signal.event_at ? Math.max(0, 100 - Math.floor((Date.now() - new Date(signal.event_at).getTime()) / (1000 * 60 * 60 * 24))) : 0]
               ].map(([label, score]) => (
                 <div key={label}>
@@ -140,8 +145,7 @@ export function SignalDetail({ id }: { id: string }) {
           </section>
           <section className="surface p-6">
             <p className="eyebrow">Workspace actions</p>
-            <button className="button mt-4 w-full"><Bookmark size={14} />Save signal</button>
-            <button className="button mt-3 w-full"><ShieldCheck size={14} />Mark for review</button>
+            <div className="mt-4"><IntelligenceActions title={signal.title} path={`/signals/${signal.id}`} /></div>
           </section>
         </aside>
       </section>

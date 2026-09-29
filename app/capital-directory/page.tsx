@@ -13,7 +13,7 @@ export default function CapitalDirectoryPage() {
     async function loadEntities() {
       try {
         const workspaceId = typeof window !== 'undefined' ? localStorage.getItem('workspace_id') || '' : '';
-        if (!workspaceId) throw new Error('No workspace selected');
+        if (!workspaceId) return;
         const { data } = await fetchCapitalDirectory({ workspace_id: workspaceId, limit: 100 });
         setEntities(data);
       } catch (err) {

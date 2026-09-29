@@ -12,7 +12,7 @@ export default function EvidenceReviewPage() {
     async function loadQueue() {
       try {
         const workspaceId = typeof window !== 'undefined' ? localStorage.getItem('workspace_id') || '' : '';
-        if (!workspaceId) throw new Error('No workspace selected');
+        if (!workspaceId) return;
         const { data } = await fetchEvidenceReviewQueue({ workspace_id: workspaceId, limit: 100 });
         setQueue(data);
       } catch (err) {

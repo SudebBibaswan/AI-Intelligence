@@ -13,7 +13,7 @@ export default function ValidationsPage() {
     async function loadValidations() {
       try {
         const workspaceId = typeof window !== 'undefined' ? localStorage.getItem('workspace_id') || '' : '';
-        if (!workspaceId) throw new Error('No workspace selected');
+        if (!workspaceId) return;
         const { data } = await fetchValidations({ workspace_id: workspaceId, limit: 100 });
         setValidations(data);
       } catch (err) {

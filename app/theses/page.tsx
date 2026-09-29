@@ -13,7 +13,7 @@ export default function ThesesPage() {
     async function loadTheses() {
       try {
         const workspaceId = typeof window !== 'undefined' ? localStorage.getItem('workspace_id') || '' : '';
-        if (!workspaceId) throw new Error('No workspace selected');
+        if (!workspaceId) return;
         const { data } = await fetchTheses({ workspace_id: workspaceId, limit: 100 });
         setTheses(data);
       } catch (err) {

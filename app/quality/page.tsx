@@ -13,7 +13,7 @@ export default function QualityPage() {
     async function loadQuality() {
       try {
         const workspaceId = typeof window !== 'undefined' ? localStorage.getItem('workspace_id') || '' : '';
-        if (!workspaceId) throw new Error('No workspace selected');
+        if (!workspaceId) return;
         const { snapshots, recentRuns } = await fetchQualitySnapshots({ workspace_id: workspaceId, limit: 50 });
         setSnapshots(snapshots);
         setRecentRuns(recentRuns);
@@ -39,7 +39,7 @@ export default function QualityPage() {
       </header>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <div className="surface p-4 border-l-4 border-[#8fd19e]">
-          <p className="text-xs font-semibold text-[#8fd19e>">Runs Completed</p>
+          <p className="text-xs font-semibold text-[#8fd19e]">Runs Completed</p>
           <p className="mt-2 font-display text-3xl">{latest.runs_completed || 0}</p>
         </div>
         <div className="surface p-4 border-l-4 border-[#e89696]">
@@ -90,7 +90,7 @@ export default function QualityPage() {
               </div>
               <div className="flex items-center gap-6 text-sm text-[#a5abc9]">
                 <span>{run.evidence_count} evidence · {run.verified_evidence} verified</span>
-                <span>{run.source_to_evidence_yield ? Math.round(run.source_to_evidence_yield * 10000) / 100 + '%' yield : '0% yield'}</span>
+                <span>{run.source_to_evidence_yield ? `${Math.round(run.source_to_evidence_yield * 10000) / 100}% yield` : '0% yield'}</span>
                 <span>${run.estimated_cost_usd?.toFixed(4)}</span>
                 <span className="font-mono text-xs">{new Date(run.created_at).toLocaleString()}</span>
               </div>

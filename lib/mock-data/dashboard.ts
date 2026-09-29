@@ -1,4 +1,33 @@
-import type { Pattern, ResearchRun, Signal } from "@/types/intelligence";
+export type DashboardSignal = {
+  id: string;
+  type: "funding" | "product" | "research" | "market";
+  title: string;
+  summary: string;
+  entities: string[];
+  topic: string;
+  publishedAt: string;
+  confidence: "High" | "Medium" | "Low";
+  evidenceCount: number;
+  hasCounterEvidence: boolean;
+};
+
+export type DashboardPattern = {
+  id: string;
+  statement: string;
+  strength: number;
+  window: string;
+  observations: number;
+  counterSignals: number;
+};
+
+export type ResearchRun = {
+  id: string;
+  name: string;
+  status: "Completed" | "Running";
+  progress: number;
+  acceptedSources: number;
+  completedAt: string;
+};
 
 export const dashboardSnapshot = {
   sourceCutoffAt: "27 Sep 2026, 07:30 UTC",
@@ -11,7 +40,7 @@ export const dashboardSnapshot = {
   },
 };
 
-export const signals: Signal[] = [
+export const signals: DashboardSignal[] = [
   {
     id: "sig-agent-control",
     type: "funding",
@@ -50,7 +79,7 @@ export const signals: Signal[] = [
   },
 ];
 
-export const patterns: Pattern[] = [
+export const patterns: DashboardPattern[] = [
   {
     id: "pat-governance",
     statement: "AI-agent adoption is creating demand for independent control layers.",
@@ -73,3 +102,15 @@ export const researchRuns: ResearchRun[] = [
   { id: "run-daily", name: "Daily AI ecosystem scan", status: "Completed", progress: 100, acceptedSources: 42, completedAt: "Today, 07:35 UTC" },
   { id: "run-agents", name: "Agent governance follow-up", status: "Running", progress: 64, acceptedSources: 17, completedAt: "Started 18 min ago" },
 ];
+
+export const investmentDomains = [
+  { name: "Agent infrastructure", amount: 128, detail: "Runtime and orchestration", change: "+24%" },
+  { name: "Model tooling", amount: 94, detail: "Evaluation and observability", change: "+17%" },
+  { name: "Enterprise AI", amount: 76, detail: "Workflow applications", change: "+12%" },
+] as const;
+
+export const investmentRounds = [
+  ["Convergence", "Agent infrastructure", "Series A", "$72m", "Index Ventures", "Sep 2026"],
+  ["Langfuse", "Model tooling", "Series B", "$34m", "General Catalyst", "Sep 2026"],
+  ["Harvey", "Enterprise AI", "Series D", "$50m", "Sequoia", "Aug 2026"],
+] as const;
