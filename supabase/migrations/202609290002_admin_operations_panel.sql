@@ -5,32 +5,47 @@ begin;
 create or replace view public.v_admin_overview_daily
 with (security_invoker = true)
 as
+with usage_daily as (
+  select
+    usage.workspace_id,
+    (usage.created_at at time zone 'UTC')::date as activity_date,
+    count(*) as llm_request_count,
+    count(*) filter (where usage.success) as llm_success_count,
+    count(*) filter (where not usage.success) as llm_failed_count,
+    coalesce(sum(usage.input_tokens), 0) as input_tokens,
+    coalesce(sum(usage.output_tokens), 0) as output_tokens,
+    coalesce(sum(coalesce(usage.input_tokens, 0) + coalesce(usage.output_tokens, 0)), 0) as total_tokens,
+    coalesce(sum(usage.estimated_cost_usd), 0)::numeric(12,6) as estimated_cost_usd
+  from public.llm_usage usage
+  where private.is_workspace_member(usage.workspace_id, array['owner', 'admin'])
+  group by usage.workspace_id, (usage.created_at at time zone 'UTC')::date
+),
+run_daily as (
+  select
+    run.workspace_id,
+    (run.created_at at time zone 'UTC')::date as activity_date,
+    count(*) as workflow_run_count,
+    count(*) filter (where run.status in ('partial', 'failed')) as workflow_problem_count
+  from public.research_runs run
+  where private.is_workspace_member(run.workspace_id, array['owner', 'admin'])
+  group by run.workspace_id, (run.created_at at time zone 'UTC')::date
+)
 select
-  usage.workspace_id,
-  (usage.created_at at time zone 'UTC')::date as activity_date,
-  count(*) as llm_request_count,
-  count(*) filter (where usage.success) as llm_success_count,
-  count(*) filter (where not usage.success) as llm_failed_count,
-  coalesce(sum(usage.input_tokens), 0) as input_tokens,
-  coalesce(sum(usage.output_tokens), 0) as output_tokens,
-  coalesce(sum(usage.input_tokens + usage.output_tokens), 0) as total_tokens,
-  coalesce(sum(usage.estimated_cost_usd), 0)::numeric(12,6) as estimated_cost_usd,
-  coalesce((
-    select count(*)
-    from public.research_runs run
-    where run.workspace_id = usage.workspace_id
-      and (run.created_at at time zone 'UTC')::date = (usage.created_at at time zone 'UTC')::date
-  ), 0) as workflow_run_count,
-  coalesce((
-    select count(*)
-    from public.research_runs run
-    where run.workspace_id = usage.workspace_id
-      and (run.created_at at time zone 'UTC')::date = (usage.created_at at time zone 'UTC')::date
-      and run.status in ('partial', 'failed')
-  ), 0) as workflow_problem_count
-from public.llm_usage usage
-where private.is_workspace_member(usage.workspace_id, array['owner', 'admin'])
-group by usage.workspace_id, (usage.created_at at time zone 'UTC')::date;
+  usage_daily.workspace_id,
+  usage_daily.activity_date,
+  usage_daily.llm_request_count,
+  usage_daily.llm_success_count,
+  usage_daily.llm_failed_count,
+  usage_daily.input_tokens,
+  usage_daily.output_tokens,
+  usage_daily.total_tokens,
+  usage_daily.estimated_cost_usd,
+  coalesce(run_daily.workflow_run_count, 0) as workflow_run_count,
+  coalesce(run_daily.workflow_problem_count, 0) as workflow_problem_count
+from usage_daily
+left join run_daily
+  on run_daily.workspace_id = usage_daily.workspace_id
+ and run_daily.activity_date = usage_daily.activity_date;
 
 create or replace view public.v_admin_pipeline_counts
 with (security_invoker = true)

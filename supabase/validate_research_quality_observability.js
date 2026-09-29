@@ -3,6 +3,7 @@ const path = require('path');
 
 const migration = fs.readFileSync(path.join(__dirname, 'migrations', '202609270010_research_quality_observability.sql'), 'utf8');
 const snapshotsMigration = fs.readFileSync(path.join(__dirname, 'migrations', '202609290001_research_quality_snapshots.sql'), 'utf8');
+const adminMigration = fs.readFileSync(path.join(__dirname, 'migrations', '202609290002_admin_operations_panel.sql'), 'utf8');
 const failures = [];
 const migrationVersions = new Map();
 for (const filename of fs.readdirSync(path.join(__dirname, 'migrations'))) {
@@ -35,6 +36,14 @@ for (const policy of ['research_quality_snapshots_select_member', 'research_qual
   if (drop < 0 || create < 0 || drop > create) failures.push(`Snapshot policy ${policy} is not replay-safe`);
 }
 if (!/^begin;[\s\S]*commit;\s*$/.test(snapshotsMigration)) failures.push('Snapshots migration must be transactional');
+for (const fragment of ['with usage_daily as (', 'run_daily as (', 'left join run_daily',
+  'run_daily.activity_date = usage_daily.activity_date']) {
+  if (!adminMigration.includes(fragment)) failures.push(`Admin daily aggregation missing: ${fragment}`);
+}
+if (/where run\.workspace_id = usage\.workspace_id/.test(adminMigration)) {
+  failures.push('Admin daily view must not correlate grouped usage rows with research runs');
+}
+if (!/^begin;[\s\S]*commit;\s*$/.test(adminMigration)) failures.push('Admin migration must be transactional');
 
 if (failures.length) {
   console.error('RESEARCH QUALITY OBSERVABILITY VALIDATION FAILED');
