@@ -1,0 +1,200 @@
+{"kind":"deck","id":"pr/22u1dw","name":"Deck"}
+{"kind":"layout","layoutId":"31e5a3a2-c8c7-47bf-872e-b75aa5ce67d2","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"1dba0e57-12bb-47ac-9573-813666bfafd9","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/n6phhg","slide":1,"title":"INTELLIGENCE","textShapes":5}
+{"kind":"shape","id":"sh/9srep4bi","slide":1,"bbox":[0,0,20,720]}
+{"kind":"textbox","id":"sh/m5gvups7","slide":1,"text":"INTELLIGENCE","textPreview":"INTELLIGENCE","textChars":12,"textLines":1,"bbox":[90,136,900,72]}
+{"kind":"textbox","id":"sh/n6pwnuts","slide":1,"text":"Personal market intelligence for students and aspiring founders","textPreview":"Personal market intelligence for students and aspiring founders","textChars":63,"textLines":1,"bbox":[90,222,860,62]}
+{"kind":"textbox","id":"sh/03ydsza1","slide":1,"text":"Outclass Project | Product strategy, market opportunity, MVP and launch plan","textPreview":"Outclass Project | Product strategy, market opportunity, MVP and launch plan","textChars":76,"textLines":1,"bbox":[90,316,840,32]}
+{"kind":"shape","id":"sh/147elkbm","slide":1,"bbox":[90,408,540,3]}
+{"kind":"textbox","id":"sh/e1gvqpsv","slide":1,"text":"A 7 minute presentation with a local MVP demo","textPreview":"A 7 minute presentation with a local MVP demo","textChars":45,"textLines":1,"bbox":[90,435,600,28]}
+{"kind":"textbox","id":"sh/z2pwjutg","slide":1,"text":"September 2026","textPreview":"September 2026","textChars":14,"textLines":1,"bbox":[90,650,300,24]}
+{"kind":"notes","id":"nt/n6phhg","slide":1,"text":"Project source: Outclass_Project_Document.docx supplied by the team."}
+{"kind":"slide","id":"sl/e9fana","slide":2,"title":"02","textShapes":11}
+{"kind":"textbox","id":"sh/8jih0vu5","slide":2,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[70,35,48,22]}
+{"kind":"textbox","id":"sh/7i9g7qtk","slide":2,"text":"Problem statement","textPreview":"Problem statement","textChars":17,"textLines":1,"bbox":[70,64,1110,50]}
+{"kind":"shape","id":"sh/mh0zy5cz","slide":2,"bbox":[70,121,1140,4]}
+{"kind":"textbox","id":"sh/hobydkbm","slide":2,"text":"Students research emerging sectors through a scattered set of sources.","textPreview":"Students research emerging sectors through a scattered set of sources.","textChars":70,"textLines":1,"bbox":[70,143,1060,36]}
+{"kind":"textbox","id":"sh/wn2h4fuh","slide":2,"text":"Intelligence | Outclass Project","textPreview":"Intelligence | Outclass Project","textChars":31,"textLines":1,"bbox":[70,684,320,18]}
+{"kind":"shape","id":"sh/vm9gbatw","slide":2,"bbox":[90,220,6,260]}
+{"kind":"textbox","id":"sh/ul0z25cb","slide":2,"text":"Fragmented research","textPreview":"Fragmented research","textChars":19,"textLines":1,"bbox":[112,220,308,28]}
+{"kind":"textbox","id":"sh/xs7y1gbi","slide":2,"text":"Students move between search engines, X, LinkedIn, YouTube, VC blogs and company sites. Each source provides a piece of the picture.","textPreview":"Students move between search engines, X, LinkedIn, YouTube, VC blogs and company sites. Each source provides a piece of the picture.","textChars":132,"textLines":1,"bbox":[112,262,308,218]}
+{"kind":"shape","id":"sh/cryxsbux","slide":2,"bbox":[470,220,6,260]}
+{"kind":"textbox","id":"sh/2pkjqx0n","slide":2,"text":"Manual synthesis","textPreview":"Manual synthesis","textChars":16,"textLines":1,"bbox":[492,220,308,28]}
+{"kind":"textbox","id":"sh/nqt0zi18","slide":2,"text":"The work of connecting funding, products, investor behaviour and market shifts takes time. Repeating it every week is difficult.","textPreview":"The work of connecting funding, products, investor behaviour and market shifts takes time. Repeating it every week is difficult.","textChars":128,"textLines":1,"bbox":[492,262,308,218]}
+{"kind":"shape","id":"sh/or21snit","slide":2,"bbox":[850,220,6,260]}
+{"kind":"textbox","id":"sh/psbi1sjy","slide":2,"text":"Missing opportunity context","textPreview":"Missing opportunity context","textChars":27,"textLines":1,"bbox":[872,220,308,28]}
+{"kind":"textbox","id":"sh/atkjux0j","slide":2,"text":"News feeds and company databases show events. Students still need help understanding recurring patterns and deciding what to investigate.","textPreview":"News feeds and company databases show events. Students still need help understanding recurring patterns and deciding what to investigate.","textChars":137,"textLines":1,"bbox":[872,262,308,218]}
+{"kind":"textbox","id":"sh/butk3214","slide":2,"text":"Initial use case: Masters’ Union students completing ecosystem-analysis assignments and exploring founder ideas.","textPreview":"Initial use case: Masters’ Union students completing ecosystem-analysis assignments and exploring founder ideas.","textChars":112,"textLines":1,"bbox":[90,540,1000,45]}
+{"kind":"notes","id":"nt/e9fana","slide":2,"text":"Project source: Outclass_Project_Document.docx supplied by the team."}
+{"kind":"slide","id":"sl/79pv34","slide":3,"title":"03","textShapes":11}
+{"kind":"textbox","id":"sh/dkfq5cvu","slide":3,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[70,35,48,22]}
+{"kind":"textbox","id":"sh/qh47axcj","slide":3,"text":"User persona","textPreview":"User persona","textChars":12,"textLines":1,"bbox":[70,64,1110,50]}
+{"kind":"shape","id":"sh/rid832d4","slide":3,"bbox":[70,121,1140,4]}
+{"kind":"textbox","id":"sh/4fmp87ud","slide":3,"text":"Aarav represents the first user segment.","textPreview":"Aarav represents the first user segment.","textChars":40,"textLines":1,"bbox":[70,143,1060,36]}
+{"kind":"textbox","id":"sh/pgvq1cvy","slide":3,"text":"Intelligence | Outclass Project","textPreview":"Intelligence | Outclass Project","textChars":31,"textLines":1,"bbox":[70,684,320,18]}
+{"kind":"textbox","id":"sh/2t476xc7","slide":3,"text":"Aarav","textPreview":"Aarav","textChars":5,"textLines":1,"bbox":[100,220,280,50]}
+{"kind":"textbox","id":"sh/3udoz2ds","slide":3,"text":"22 years old\nMasters’ Union student\nAspiring founder","textPreview":"22 years old | Masters’ Union student | Aspiring founder","textChars":52,"textLines":3,"bbox":[100,287,270,110]}
+{"kind":"shape","id":"sh/obqpkruh","slide":3,"bbox":[450,215,6,205]}
+{"kind":"textbox","id":"sh/9czqdwb2","slide":3,"text":"Current behaviour","textPreview":"Current behaviour","textChars":17,"textLines":1,"bbox":[472,215,288,28]}
+{"kind":"textbox","id":"sh/18nepsra","slide":3,"text":"Follows founders, tracks funding, reads articles and watches podcasts. He has many inputs but no consistent view of the market.","textPreview":"Follows founders, tracks funding, reads articles and watches podcasts. He has many inputs but no consistent view of the market.","textChars":127,"textLines":1,"bbox":[472,257,288,163]}
+{"kind":"shape","id":"sh/gnudwnqp","slide":3,"bbox":[810,215,6,205]}
+{"kind":"textbox","id":"sh/fmlwni94","slide":3,"text":"Job to be done","textPreview":"Job to be done","textChars":14,"textLines":1,"bbox":[832,215,288,28]}
+{"kind":"textbox","id":"sh/elcvud8j","slide":3,"text":"Help me understand what is changing in a chosen sector and show me which opportunity deserves my next hour of research.","textPreview":"Help me understand what is changing in a chosen sector and show me which opportunity deserves my next hour of research.","textChars":119,"textLines":1,"bbox":[832,257,288,163]}
+{"kind":"textbox","id":"sh/tk3ul8ry","slide":3,"text":"Success for Aarav: he can move from a market event to evidence, a pattern and a research question without building a manual spreadsheet.","textPreview":"Success for Aarav: he can move from a market event to evidence, a pattern and a research question without building a manual spreadsheet.","textChars":136,"textLines":1,"bbox":[100,500,1030,48]}
+{"kind":"notes","id":"nt/79pv34","slide":3,"text":"Project source: Outclass_Project_Document.docx supplied by the team."}
+{"kind":"slide","id":"sl/lnyk55","slide":4,"title":"04","textShapes":9}
+{"kind":"textbox","id":"sh/65wv2dgz","slide":4,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[70,35,48,22]}
+{"kind":"textbox","id":"sh/tsned8zq","slide":4,"text":"Why now","textPreview":"Why now","textChars":7,"textLines":1,"bbox":[70,64,1110,50]}
+{"kind":"shape","id":"sh/sred4ny5","slide":4,"bbox":[70,121,1140,4]}
+{"kind":"textbox","id":"sh/fupwfihg","slide":4,"text":"The need is growing for domain-specific knowledge and a human check on AI-generated conclusions.","textPreview":"The need is growing for domain-specific knowledge and a human check on AI-generated conclusions.","textChars":96,"textLines":1,"bbox":[70,143,1060,36]}
+{"kind":"textbox","id":"sh/etgv6dgv","slide":4,"text":"Intelligence | Outclass Project","textPreview":"Intelligence | Outclass Project","textChars":31,"textLines":1,"bbox":[70,684,320,18]}
+{"kind":"shape","id":"sh/1w7ehszm","slide":4,"bbox":[90,220,6,250]}
+{"kind":"textbox","id":"sh/gvyd8ny1","slide":4,"text":"Domain context","textPreview":"Domain context","textChars":14,"textLines":1,"bbox":[112,220,473,28]}
+{"kind":"textbox","id":"sh/3ypwj2hs","slide":4,"text":"Gartner’s public GenAI adoption research identifies domain-specific knowledge management and agentic assistants as drivers of adoption over the next three years.","textPreview":"Gartner’s public GenAI adoption research identifies domain-specific knowledge management and agentic assistants as drivers of adoption ov...","textChars":161,"textLines":1,"bbox":[112,262,473,208]}
+{"kind":"shape","id":"sh/2xgvaxg7","slide":4,"bbox":[665,220,6,250]}
+{"kind":"textbox","id":"sh/0nuh4v6l","slide":4,"text":"Human judgment","textPreview":"Human judgment","textChars":14,"textLines":1,"bbox":[687,220,473,28]}
+{"kind":"textbox","id":"sh/1o3yd076","slide":4,"text":"A personal intelligence product should retain source lineage, show counter-evidence and let the student decide what to explore next.","textPreview":"A personal intelligence product should retain source lineage, show counter-evidence and let the student decide what to explore next.","textChars":132,"textLines":1,"bbox":[687,262,473,208]}
+{"kind":"textbox","id":"sh/elsz25of","slide":4,"text":"Product implication: start with a narrow domain and evidence-backed workflows before expanding across sectors.","textPreview":"Product implication: start with a narrow domain and evidence-backed workflows before expanding across sectors.","textChars":110,"textLines":1,"bbox":[90,545,1000,36]}
+{"kind":"notes","id":"nt/lnyk55","slide":4,"text":"Gartner public abstract, Emerging Tech: Adoption Trends for Generative AI, 28 Jan 2025: https://www.gartner.com/en/documents/6121359"}
+{"kind":"slide","id":"sl/0b58ct","slide":5,"title":"05","textShapes":14}
+{"kind":"textbox","id":"sh/atc7i1w7","slide":5,"text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[70,35,48,22]}
+{"kind":"textbox","id":"sh/hwn6tgfy","slide":5,"text":"Market sizing","textPreview":"Market sizing","textChars":13,"textLines":1,"bbox":[70,64,1110,50]}
+{"kind":"shape","id":"sh/wvepkbed","slide":5,"bbox":[70,121,1140,4]}
+{"kind":"textbox","id":"sh/nqlonmxw","slide":5,"text":"Annual subscription opportunity in India. Pricing and capture values are planning assumptions.","textPreview":"Annual subscription opportunity in India. Pricing and capture values are planning assumptions.","textChars":94,"textLines":1,"bbox":[70,143,1060,36]}
+{"kind":"textbox","id":"sh/m5c7ehwb","slide":5,"text":"Intelligence | Outclass Project","textPreview":"Intelligence | Outclass Project","textChars":31,"textLines":1,"bbox":[70,684,320,18]}
+{"kind":"textbox","id":"sh/8rupgreh","slide":5,"text":"4.50 crore","textPreview":"4.50 crore","textChars":10,"textLines":1,"bbox":[770,220,335,42]}
+{"kind":"textbox","id":"sh/z21ojmxk","slide":5,"text":"TAM","textPreview":"TAM","textChars":3,"textLines":1,"bbox":[770,266,335,24]}
+{"kind":"textbox","id":"sh/y1snahwf","slide":5,"text":"All higher-education students in India × ₹2,999 annual plan","textPreview":"All higher-education students in India × ₹2,999 annual plan","textChars":59,"textLines":1,"bbox":[770,293,335,42]}
+{"kind":"textbox","id":"sh/kf6d0rmt","slide":5,"text":"46.32 lakh","textPreview":"46.32 lakh","textChars":10,"textLines":1,"bbox":[770,345,335,42]}
+{"kind":"textbox","id":"sh/50zu9wne","slide":5,"text":"SAM","textPreview":"SAM","textChars":3,"textLines":1,"bbox":[770,391,335,24]}
+{"kind":"textbox","id":"sh/idovyh43","slide":5,"text":"Management PG plus Engineering and Technology UG students × ₹2,999","textPreview":"Management PG plus Engineering and Technology UG students × ₹2,999","textChars":66,"textLines":1,"bbox":[770,418,335,42]}
+{"kind":"textbox","id":"sh/jexc7m58","slide":5,"text":"10,000","textPreview":"10,000","textChars":6,"textLines":1,"bbox":[770,470,335,42]}
+{"kind":"textbox","id":"sh/wb6tw7mx","slide":5,"text":"SOM","textPreview":"SOM","textChars":3,"textLines":1,"bbox":[770,516,335,24]}
+{"kind":"textbox","id":"sh/xcfu5cni","slide":5,"text":"Three-year campus-pilot target. 25 cohorts × 400 paid users","textPreview":"Three-year campus-pilot target. 25 cohorts × 400 paid users","textChars":59,"textLines":1,"bbox":[770,543,335,42]}
+{"kind":"textbox","id":"sh/a9obuh4r","slide":5,"text":"TAM: ₹13,496 crore | SAM: ₹1,389 crore | SOM: ₹3.0 crore annual recurring revenue","textPreview":"TAM: ₹13,496 crore | SAM: ₹1,389 crore | SOM: ₹3.0 crore annual recurring revenue","textChars":81,"textLines":1,"bbox":[100,585,1060,28]}
+{"kind":"chart","id":"ch/lsf61sr2","slide":5,"name":"","chartType":"bar","bbox":[100,215,600,330]}
+{"kind":"notes","id":"nt/0b58ct","slide":5,"text":"AISHE 2023-24: https://www.pib.gov.in/newsite/erelcontent.aspx?lang=2&reg=48&relid=291005\nAISHE 2021-22 discipline data: https://aishe.gov.in/document/aishe-final-report-2021-22/\nCalculations: TAM 45,000,000 × ₹2,999. SAM 4,632,000 × ₹2,999. SOM 10,000 × ₹2,999. Management PG and Engineering UG counts use AISHE 2021-22 figures. Pricing and adoption targets are team assumptions."}
+{"kind":"slide","id":"sl/p1f7kv","slide":6,"title":"06","textShapes":5}
+{"kind":"textbox","id":"sh/xcfydcv6","slide":6,"text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[70,35,48,22]}
+{"kind":"textbox","id":"sh/a94f2xwf","slide":6,"text":"Competitive analysis","textPreview":"Competitive analysis","textChars":20,"textLines":1,"bbox":[70,64,1110,50]}
+{"kind":"shape","id":"sh/vaxgb2d0","slide":6,"bbox":[70,121,1140,4]}
+{"kind":"textbox","id":"sh/kf6x8rex","slide":6,"text":"Existing tools are strong at data access. Intelligence adds an evidence-led student workflow.","textPreview":"Existing tools are strong at data access. Intelligence adds an evidence-led student workflow.","textChars":93,"textLines":1,"bbox":[70,143,1060,36]}
+{"kind":"textbox","id":"sh/5gfyhwvi","slide":6,"text":"Intelligence | Outclass Project","textPreview":"Intelligence | Outclass Project","textChars":31,"textLines":1,"bbox":[70,684,320,18]}
+{"kind":"textbox","id":"sh/jexgfmdc","slide":6,"text":"Feature comparison based on public product positioning. “Limited” means the feature exists in a narrower or enterprise-focused form.","textPreview":"Feature comparison based on public product positioning. “Limited” means the feature exists in a narrower or enterprise-focused form.","textChars":132,"textLines":1,"bbox":[70,600,1040,25]}
+{"kind":"table","id":"tb/nqlwfeho","slide":6,"name":"","rows":7,"cols":7,"preview":"Product | Primary strength | News | Startup data | Investor thesis | Patterns | Validation","bbox":[70,210,1140,355]}
+{"kind":"notes","id":"nt/p1f7kv","slide":6,"text":"Competitor product pages: https://about.crunchbase.com/products/crunchbase-pro | https://pitchbook.com/pricing | https://www.cbinsights.com/what-we-offer/pricing/\nCompetitive comparison is a positioning assessment based on public product pages, not an independent feature audit."}
+{"kind":"slide","id":"sl/ocvsgu","slide":7,"title":"07","textShapes":9}
+{"kind":"textbox","id":"sh/hg3i98ru","slide":7,"text":"07","textPreview":"07","textChars":2,"textLines":1,"bbox":[70,35,48,22]}
+{"kind":"textbox","id":"sh/utszyt83","slide":7,"text":"Product hypothesis and value proposition","textPreview":"Product hypothesis and value proposition","textChars":40,"textLines":1,"bbox":[70,64,1110,50]}
+{"kind":"shape","id":"sh/ful07y9o","slide":7,"bbox":[70,121,1140,4]}
+{"kind":"textbox","id":"sh/8rahw3qd","slide":7,"text":"Students will return when intelligence turns market activity into a traceable research thread.","textPreview":"Students will return when intelligence turns market activity into a traceable research thread.","textChars":94,"textLines":1,"bbox":[70,143,1060,36]}
+{"kind":"textbox","id":"sh/tsji58ri","slide":7,"text":"Intelligence | Outclass Project","textPreview":"Intelligence | Outclass Project","textChars":31,"textLines":1,"bbox":[70,684,320,18]}
+{"kind":"shape","id":"sh/6pszut87","slide":7,"bbox":[90,220,6,250]}
+{"kind":"textbox","id":"sh/7q103y9s","slide":7,"text":"Hypothesis","textPreview":"Hypothesis","textChars":10,"textLines":1,"bbox":[112,220,478,28]}
+{"kind":"textbox","id":"sh/knahsjq1","slide":7,"text":"If a student chooses a domain and receives source-backed signals, pattern context and an investigation path, they will save time and develop stronger market theses.","textPreview":"If a student chooses a domain and receives source-backed signals, pattern context and an investigation path, they will save time and deve...","textChars":164,"textLines":1,"bbox":[112,262,478,208]}
+{"kind":"shape","id":"sh/loji1orm","slide":7,"bbox":[670,220,6,250]}
+{"kind":"textbox","id":"sh/t4jedsn6","slide":7,"text":"Value proposition","textPreview":"Value proposition","textChars":17,"textLines":1,"bbox":[692,220,478,28]}
+{"kind":"textbox","id":"sh/s3ad4nml","slide":7,"text":"One workspace connects investment activity, evidence, signals, patterns and hypotheses. The user can follow the trail instead of collecting links across tabs.","textPreview":"One workspace connects investment activity, evidence, signals, patterns and hypotheses. The user can follow the trail instead of collecti...","textChars":158,"textLines":1,"bbox":[692,262,478,208]}
+{"kind":"textbox","id":"sh/r21wbi50","slide":7,"text":"North Star Metric: weekly active users who open an intelligence item and then save, share or investigate it further.","textPreview":"North Star Metric: weekly active users who open an intelligence item and then save, share or investigate it further.","textChars":116,"textLines":1,"bbox":[90,545,1060,40]}
+{"kind":"notes","id":"nt/ocvsgu","slide":7,"text":"Project source: Outclass_Project_Document.docx supplied by the team.\nNorth Star Metric is a team proposal based on the product workflow."}
+{"kind":"slide","id":"sl/czfdrn","slide":8,"title":"08","textShapes":13}
+{"kind":"textbox","id":"sh/f6hoba54","slide":8,"text":"08","textPreview":"08","textChars":2,"textLines":1,"bbox":[70,35,48,22]}
+{"kind":"textbox","id":"sh/g7q54fmp","slide":8,"text":"Solution details","textPreview":"Solution details","textChars":16,"textLines":1,"bbox":[70,64,1110,50]}
+{"kind":"shape","id":"sh/18z6dkna","slide":8,"bbox":[70,121,1140,4]}
+{"kind":"textbox","id":"sh/298n6p4v","slide":8,"text":"A personal intelligence flow from domain selection to investigation.","textPreview":"A personal intelligence flow from domain selection to investigation.","textChars":68,"textLines":1,"bbox":[70,143,1060,36]}
+{"kind":"textbox","id":"sh/3ahofu5g","slide":8,"text":"Intelligence | Outclass Project","textPreview":"Intelligence | Outclass Project","textChars":31,"textLines":1,"bbox":[70,684,320,18]}
+{"kind":"textbox","id":"sh/oba58zml","slide":8,"text":"Choose a domain","textPreview":"Choose a domain","textChars":15,"textLines":1,"bbox":[95,240,235,30]}
+{"kind":"textbox","id":"sh/pcj6hkn6","slide":8,"text":"Receive signals","textPreview":"Receive signals","textChars":15,"textLines":1,"bbox":[365,240,235,30]}
+{"kind":"textbox","id":"sh/idonulob","slide":8,"text":"Read the evidence","textPreview":"Read the evidence","textChars":17,"textLines":1,"bbox":[635,240,235,30]}
+{"kind":"textbox","id":"sh/jex43q5w","slide":8,"text":"Track patterns","textPreview":"Track patterns","textChars":14,"textLines":1,"bbox":[905,240,235,30]}
+{"kind":"shape","id":"sh/3mdgbut8","slide":8,"bbox":[120,300,190,6]}
+{"kind":"shape","id":"sh/2l4f2pcn","slide":8,"bbox":[390,300,190,6]}
+{"kind":"shape","id":"sh/p8vydkby","slide":8,"bbox":[660,300,190,6]}
+{"kind":"shape","id":"sh/o7mx4zut","slide":8,"bbox":[930,300,190,6]}
+{"kind":"textbox","id":"sh/fitg7atw","slide":8,"text":"AI domains, topics and geography","textPreview":"AI domains, topics and geography","textChars":32,"textLines":1,"bbox":[95,335,235,58]}
+{"kind":"textbox","id":"sh/ehkfy5cb","slide":8,"text":"Funding, product and research changes","textPreview":"Funding, product and research changes","textChars":37,"textLines":1,"bbox":[365,335,235,58]}
+{"kind":"textbox","id":"sh/1kby9kb2","slide":8,"text":"External sources and counter-evidence","textPreview":"External sources and counter-evidence","textChars":37,"textLines":1,"bbox":[635,335,235,58]}
+{"kind":"textbox","id":"sh/gj2x0fuh","slide":8,"text":"Recurring market relationships and hypotheses","textPreview":"Recurring market relationships and hypotheses","textChars":45,"textLines":1,"bbox":[905,335,235,58]}
+{"kind":"textbox","id":"sh/retg3at0","slide":8,"text":"The MVP also includes company investment pages, a saved-intelligence library, a seven-day timeline and a profile that stores user preferences in the browser.","textPreview":"The MVP also includes company investment pages, a saved-intelligence library, a seven-day timeline and a profile that stores user prefere...","textChars":157,"textLines":1,"bbox":[100,510,1030,54]}
+{"kind":"notes","id":"nt/czfdrn","slide":8,"text":"Project source: Outclass_Project_Document.docx supplied by the team.\nMVP feature scope verified from the local Intelligence project."}
+{"kind":"slide","id":"sl/ztth8m","slide":9,"title":"09","textShapes":5}
+{"kind":"textbox","id":"sh/x0fe18v2","slide":9,"text":"09","textPreview":"09","textChars":2,"textLines":1,"bbox":[70,35,48,22]}
+{"kind":"textbox","id":"sh/adovqtwb","slide":9,"text":"Functional MVP demonstration","textPreview":"Functional MVP demonstration","textChars":28,"textLines":1,"bbox":[70,64,1110,50]}
+{"kind":"shape","id":"sh/bexwzydw","slide":9,"bbox":[70,121,1140,4]}
+{"kind":"textbox","id":"sh/obmdojel","slide":9,"text":"The product runs locally and the demo follows the research journey.","textPreview":"The product runs locally and the demo follows the research journey.","textChars":67,"textLines":1,"bbox":[70,143,1060,36]}
+{"kind":"textbox","id":"sh/pcfexov6","slide":9,"text":"Intelligence | Outclass Project","textPreview":"Intelligence | Outclass Project","textChars":31,"textLines":1,"bbox":[70,684,320,18]}
+{"kind":"textbox","id":"sh/nadwved0","slide":9,"text":"Demo time: 60 to 75 seconds. Use the local server already running on the presenter’s laptop.","textPreview":"Demo time: 60 to 75 seconds. Use the local server already running on the presenter’s laptop.","textChars":92,"textLines":1,"bbox":[110,610,950,28]}
+{"kind":"table","id":"tb/velkvmps","slide":9,"name":"","rows":7,"cols":3,"preview":"Step | Route | What to show","bbox":[110,215,1060,360]}
+{"kind":"notes","id":"nt/ztth8m","slide":9,"text":"Live product demonstration. No external source."}
+{"kind":"slide","id":"sl/2c1j0g","slide":10,"title":"10","textShapes":9}
+{"kind":"textbox","id":"sh/xg72lgja","slide":10,"text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[70,35,48,22]}
+{"kind":"textbox","id":"sh/adg3q1kz","slide":10,"text":"Customer discovery and interview plan","textPreview":"Customer discovery and interview plan","textChars":37,"textLines":1,"bbox":[70,64,1110,50]}
+{"kind":"shape","id":"sh/vepkj61k","slide":10,"bbox":[70,121,1140,4]}
+{"kind":"textbox","id":"sh/k3ylwb21","slide":10,"text":"The supplied project file documents the user problem but contains no primary-interview records.","textPreview":"The supplied project file documents the user problem but contains no primary-interview records.","textChars":95,"textLines":1,"bbox":[70,143,1060,36]}
+{"kind":"textbox","id":"sh/54rmpgjm","slide":10,"text":"Intelligence | Outclass Project","textPreview":"Intelligence | Outclass Project","textChars":31,"textLines":1,"bbox":[70,684,320,18]}
+{"kind":"shape","id":"sh/ihg3u1kv","slide":10,"bbox":[90,220,6,245]}
+{"kind":"textbox","id":"sh/j2p4n61g","slide":10,"text":"Evidence available today","textPreview":"Evidence available today","textChars":24,"textLines":1,"bbox":[112,220,468,28]}
+{"kind":"textbox","id":"sh/07elkr2x","slide":10,"text":"The project document defines the student and aspiring founder persona, their fragmented research workflow and the need for continuous domain intelligence.","textPreview":"The project document defines the student and aspiring founder persona, their fragmented research workflow and the need for continuous dom...","textChars":154,"textLines":1,"bbox":[112,262,468,203]}
+{"kind":"shape","id":"sh/l8n2dwj2","slide":10,"bbox":[680,220,6,245]}
+{"kind":"textbox","id":"sh/547ed8nu","slide":10,"text":"Interview sprint","textPreview":"Interview sprint","textChars":16,"textLines":1,"bbox":[702,220,468,28]}
+{"kind":"textbox","id":"sh/43ex4369","slide":10,"text":"Interview 5 Masters’ Union students and 3 aspiring founders. Ask about their current research stack, time spent, trust in AI summaries and willingness to pay.","textPreview":"Interview 5 Masters’ Union students and 3 aspiring founders. Ask about their current research stack, time spent, trust in AI summaries an...","textChars":158,"textLines":1,"bbox":[702,262,468,203]}
+{"kind":"textbox","id":"sh/j25wby5o","slide":10,"text":"Decision rule: move from prototype to pilot when at least 5 of 8 participants complete a research task and state that the workflow would replace part of their current manual process.","textPreview":"Decision rule: move from prototype to pilot when at least 5 of 8 participants complete a research task and state that the workflow would ...","textChars":182,"textLines":1,"bbox":[90,540,1050,48]}
+{"kind":"notes","id":"nt/2c1j0g","slide":10,"text":"Project source: Outclass_Project_Document.docx supplied by the team.\nNo interview transcripts, survey results or interview counts were supplied. This slide intentionally distinguishes documented user assumptions from future primary research."}
+{"kind":"slide","id":"sl/w3dg4n","slide":11,"title":"11","textShapes":4}
+{"kind":"textbox","id":"sh/l8zqhgz6","slide":11,"text":"11","textPreview":"11","textChars":2,"textLines":1,"bbox":[70,35,48,22]}
+{"kind":"textbox","id":"sh/y5o7610f","slide":11,"text":"Feedback incorporated into the prototype","textPreview":"Feedback incorporated into the prototype","textChars":40,"textLines":1,"bbox":[70,64,1110,50]}
+{"kind":"shape","id":"sh/z6x8f6h0","slide":11,"bbox":[70,121,1140,4]}
+{"kind":"textbox","id":"sh/8bq9cbyx","slide":11,"text":"The current build reflects decisions made during product iteration.","textPreview":"The current build reflects decisions made during product iteration.","textChars":67,"textLines":1,"bbox":[70,143,1060,36]}
+{"kind":"textbox","id":"sh/9wzqlgz2","slide":11,"text":"Intelligence | Outclass Project","textPreview":"Intelligence | Outclass Project","textChars":31,"textLines":1,"bbox":[70,684,320,18]}
+{"kind":"table","id":"tb/7y10vid0","slide":11,"name":"","rows":6,"cols":3,"preview":"Feedback or need | Prototype response | Evidence in MVP","bbox":[70,210,1140,385]}
+{"kind":"notes","id":"nt/w3dg4n","slide":11,"text":"Prototype iteration history from the project build conversation and current local routes."}
+{"kind":"slide","id":"sl/33zcs4","slide":12,"title":"12","textShapes":9}
+{"kind":"textbox","id":"sh/g3290ba9","slide":12,"text":"12","textPreview":"12","textChars":2,"textLines":1,"bbox":[70,35,48,22]}
+{"kind":"textbox","id":"sh/f2ts769o","slide":12,"text":"Prioritization framework","textPreview":"Prioritization framework","textChars":24,"textLines":1,"bbox":[70,64,1110,50]}
+{"kind":"shape","id":"sh/e1kryls3","slide":12,"bbox":[70,121,1140,4]}
+{"kind":"textbox","id":"sh/t0ba5gri","slide":12,"text":"RICE ranks the next product decisions. MoSCoW protects the MVP scope.","textPreview":"RICE ranks the next product decisions. MoSCoW protects the MVP scope.","textChars":69,"textLines":1,"bbox":[70,143,1060,36]}
+{"kind":"textbox","id":"sh/sz29wbax","slide":12,"text":"Intelligence | Outclass Project","textPreview":"Intelligence | Outclass Project","textChars":31,"textLines":1,"bbox":[70,684,320,18]}
+{"kind":"textbox","id":"sh/ry98369c","slide":12,"text":"RICE score = Reach × Impact × Confidence ÷ Effort","textPreview":"RICE score = Reach × Impact × Confidence ÷ Effort","textChars":49,"textLines":1,"bbox":[75,190,620,35]}
+{"kind":"textbox","id":"sh/6x0ru1sr","slide":12,"text":"Productboard describes RICE as an objective scoring system and MoSCoW as a way to communicate release inclusion.","textPreview":"Productboard describes RICE as an objective scoring system and MoSCoW as a way to communicate release inclusion.","textChars":112,"textLines":1,"bbox":[75,235,610,54]}
+{"kind":"shape","id":"sh/4bi9sra1","slide":12,"bbox":[800,190,6,385]}
+{"kind":"textbox","id":"sh/y5gbqt8r","slide":12,"text":"MoSCoW MVP scope","textPreview":"MoSCoW MVP scope","textChars":16,"textLines":1,"bbox":[822,190,298,28]}
+{"kind":"textbox","id":"sh/z6psjy9c","slide":12,"text":"Must have: sign-up, domain selection, signals, evidence links, saved items and investment view.\n\nShould have: personalisation and timeline.\n\nCould have: admin preview.\n\nLater: full validation engine and billing.","textPreview":"Must have: sign-up, domain selection, signals, evidence links, saved items and investment view. |  | Should have: personalisation and tim...","textChars":211,"textLines":7,"bbox":[822,232,298,343]}
+{"kind":"textbox","id":"sh/k7yts3qh","slide":12,"text":"Scores are team assumptions for relative sequencing and should be recalibrated after primary interviews.","textPreview":"Scores are team assumptions for relative sequencing and should be recalibrated after primary interviews.","textChars":104,"textLines":1,"bbox":[75,620,900,25]}
+{"kind":"table","id":"tb/sf2ls3id","slide":12,"name":"","rows":6,"cols":6,"preview":"Feature | Reach | Impact | Confidence | Effort | RICE","bbox":[75,330,650,250]}
+{"kind":"notes","id":"nt/33zcs4","slide":12,"text":"Productboard, Product Prioritization Frameworks: https://www.productboard.com/glossary/product-prioritization-frameworks/\nRICE values are team assumptions, not observed user data."}
+{"kind":"slide","id":"sl/6jmahr","slide":13,"title":"13","textShapes":5}
+{"kind":"textbox","id":"sh/ql0rulgb","slide":13,"text":"13","textPreview":"13","textChars":2,"textLines":1,"bbox":[70,35,48,22]}
+{"kind":"textbox","id":"sh/d8rq5gzm","slide":13,"text":"Product roadmap","textPreview":"Product roadmap","textChars":15,"textLines":1,"bbox":[70,64,1110,50]}
+{"kind":"shape","id":"sh/s7i9wby1","slide":13,"bbox":[70,121,1140,4]}
+{"kind":"textbox","id":"sh/3i98z6hk","slide":13,"text":"The roadmap moves from a usable research flow to a trusted campus pilot.","textPreview":"The roadmap moves from a usable research flow to a trusted campus pilot.","textChars":72,"textLines":1,"bbox":[70,143,1060,36]}
+{"kind":"textbox","id":"sh/ihgrq1gz","slide":13,"text":"Intelligence | Outclass Project","textPreview":"Intelligence | Outclass Project","textChars":31,"textLines":1,"bbox":[70,684,320,18]}
+{"kind":"textbox","id":"sh/4ji9sby5","slide":13,"text":"Priority order follows RICE and the evidence needed to validate repeat use.","textPreview":"Priority order follows RICE and the evidence needed to validate repeat use.","textChars":75,"textLines":1,"bbox":[100,610,900,30]}
+{"kind":"table","id":"tb/8ba58zit","slide":13,"name":"","rows":6,"cols":3,"preview":"Phase | Timing | Outcome","bbox":[100,210,1080,350]}
+{"kind":"notes","id":"nt/6jmahr","slide":13,"text":"Productboard, Product Prioritization Frameworks: https://www.productboard.com/glossary/product-prioritization-frameworks/\nRoadmap timing and outcomes are the team’s planning proposal."}
+{"kind":"slide","id":"sl/gxxx2s","slide":14,"title":"14","textShapes":5}
+{"kind":"textbox","id":"sh/21cnmhg7","slide":14,"text":"14","textPreview":"14","textChars":2,"textLines":1,"bbox":[70,35,48,22]}
+{"kind":"textbox","id":"sh/po36hcfy","slide":14,"text":"Success criteria and KPIs","textPreview":"Success criteria and KPIs","textChars":25,"textLines":1,"bbox":[70,64,1110,50]}
+{"kind":"shape","id":"sh/4nu5o7yd","slide":14,"bbox":[70,121,1140,4]}
+{"kind":"textbox","id":"sh/vy1ob2xg","slide":14,"text":"Metrics connect adoption, research quality and user satisfaction.","textPreview":"Metrics connect adoption, research quality and user satisfaction.","textChars":65,"textLines":1,"bbox":[70,143,1060,36]}
+{"kind":"textbox","id":"sh/uxsnixgv","slide":14,"text":"Intelligence | Outclass Project","textPreview":"Intelligence | Outclass Project","textChars":31,"textLines":1,"bbox":[70,684,320,18]}
+{"kind":"textbox","id":"sh/gzu5k7y1","slide":14,"text":"Instrument the MVP with PostHog, Mixpanel, Amplitude or Google Analytics after consent and privacy requirements are defined.","textPreview":"Instrument the MVP with PostHog, Mixpanel, Amplitude or Google Analytics after consent and privacy requirements are defined.","textChars":124,"textLines":1,"bbox":[70,645,1060,24]}
+{"kind":"table","id":"tb/gbepkvud","slide":14,"name":"","rows":8,"cols":3,"preview":"Area | Metric | Pilot target","bbox":[70,205,1140,410]}
+{"kind":"notes","id":"nt/gxxx2s","slide":14,"text":"KPI targets are pilot hypotheses. Product analytics tools were identified in the team’s handwritten notes."}
+{"kind":"slide","id":"sl/7j1y59","slide":15,"title":"15","textShapes":11}
+{"kind":"textbox","id":"sh/d4fmd4bu","slide":15,"text":"15","textPreview":"15","textChars":2,"textLines":1,"bbox":[70,35,48,22]}
+{"kind":"textbox","id":"sh/q1o3i9sj","slide":15,"text":"Go-to-market and monetization","textPreview":"Go-to-market and monetization","textChars":29,"textLines":1,"bbox":[70,64,1110,50]}
+{"kind":"shape","id":"sh/r2x4beto","slide":15,"bbox":[70,121,1140,4]}
+{"kind":"textbox","id":"sh/0rqlojal","slide":15,"text":"Start with a narrow campus use case, prove repeat research behaviour, then expand by domain.","textPreview":"Start with a narrow campus use case, prove repeat research behaviour, then expand by domain.","textChars":92,"textLines":1,"bbox":[70,143,1060,36]}
+{"kind":"textbox","id":"sh/1szmhob6","slide":15,"text":"Intelligence | Outclass Project","textPreview":"Intelligence | Outclass Project","textChars":31,"textLines":1,"bbox":[70,684,320,18]}
+{"kind":"shape","id":"sh/epo3m9sf","slide":15,"bbox":[90,220,6,245]}
+{"kind":"textbox","id":"sh/fqx4fet0","slide":15,"text":"Beachhead","textPreview":"Beachhead","textChars":9,"textLines":1,"bbox":[112,220,288,28]}
+{"kind":"textbox","id":"sh/gvmlcfu1","slide":15,"text":"Masters’ Union courses and clubs that require ecosystem research. Run a guided pilot through faculty, student communities and founder events.","textPreview":"Masters’ Union courses and clubs that require ecosystem research. Run a guided pilot through faculty, student communities and founder eve...","textChars":141,"textLines":1,"bbox":[112,262,288,203]}
+{"kind":"shape","id":"sh/hwv25kbm","slide":15,"bbox":[480,220,6,245]}
+{"kind":"textbox","id":"sh/9k3edkfu","slide":15,"text":"Acquisition","textPreview":"Acquisition","textChars":11,"textLines":1,"bbox":[502,220,288,28]}
+{"kind":"textbox","id":"sh/ojux4fe9","slide":15,"text":"Use a free weekly AI brief as the entry point. Convert engaged users through domain tracking, saved research and company-investigation workflows.","textPreview":"Use a free weekly AI brief as the entry point. Convert engaged users through domain tracking, saved research and company-investigation wo...","textChars":145,"textLines":1,"bbox":[502,262,288,203]}
+{"kind":"shape","id":"sh/nilwbaxo","slide":15,"bbox":[870,220,6,245]}
+{"kind":"textbox","id":"sh/mhsf25w3","slide":15,"text":"Revenue","textPreview":"Revenue","textChars":7,"textLines":1,"bbox":[892,220,288,28]}
+{"kind":"textbox","id":"sh/x83ehkfq","slide":15,"text":"Freemium access to the daily brief. Student plan at ₹2,999 per year. Institution pilots and cohort licenses follow after repeat use is proven.","textPreview":"Freemium access to the daily brief. Student plan at ₹2,999 per year. Institution pilots and cohort licenses follow after repeat use is pr...","textChars":142,"textLines":1,"bbox":[892,262,288,203]}
+{"kind":"textbox","id":"sh/w7ux8ze5","slide":15,"text":"Close with the local demo: choose a domain, inspect investment movement, open evidence and save an item for the next research session.","textPreview":"Close with the local demo: choose a domain, inspect investment movement, open evidence and save an item for the next research session.","textChars":134,"textLines":1,"bbox":[90,545,1050,44]}
+{"kind":"notes","id":"nt/7j1y59","slide":15,"text":"Go-to-market and pricing are team assumptions. Market-size calculations use the ₹2,999 annual student-plan assumption."}
