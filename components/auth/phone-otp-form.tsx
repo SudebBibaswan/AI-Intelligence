@@ -1,38 +1,388 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Check, ChevronLeft, LockKeyhole, ShieldCheck, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowRight, Check, ChevronLeft, LockKeyhole, ShieldCheck, Sparkles, AlertCircle } from "lucide-react";
 import { FormEvent, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 type AuthMode = "login" | "signup";
 
 export function PhoneOtpForm({ mode = "login" }: { mode?: AuthMode }) {
   const isSignup = mode === "signup";
-  const [otpMode, setOtpMode] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const router = useRouter();
+  const supabase = createClient();
+  
+  const [authMode, setAuthMode] = useState<"password" | "otp">("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
-  const continueTo = isSignup ? "/onboarding/profile" : "/workspace";
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  const continueTo = isSignup ? "/onboarding" : "/workspace";
   const canSubmit = isSignup ? email.includes("@") && password.length >= 8 : email.includes("@") && password.length > 0;
 
-  const submitPassword = (event: FormEvent<HTMLFormElement>) => {
+  const submitPassword = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!canSubmit) return;
-    window.localStorage.setItem("ai-intelligence-demo-session", JSON.stringify({ email, remember, signedInAt: new Date().toISOString() }));
-    window.location.assign(continueTo);
+    if (!canSubmit || loading) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      if (isSignup) {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/onboarding`,
+            data: { full_name: email.split("@")[0] }
+          }
+        });
+        if (error) throw error;
+        
+        router.push("/onboarding");
+        router.refresh();
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) throw error;
+        
+        router.push("/workspace");
+        router.refresh();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Authentication failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  return <main className="grid min-h-screen bg-[#090b18] lg:grid-cols-[1fr_.92fr]"><AuthStory /><section className="flex items-center justify-center px-5 py-10 sm:px-8"><div className="w-full max-w-[420px]"><div className="mb-12 flex items-center justify-between"><Link href={isSignup ? "/login" : "/"} className="inline-flex items-center gap-1 text-xs font-semibold text-[#a5abc9] hover:text-white"><ChevronLeft size={15} />{isSignup ? "Sign in" : "Home"}</Link><div className="lg:hidden"><Brand compact /></div></div><div className="rounded-2xl border border-[#30345f] bg-[#0f1430] p-6 shadow-[0_20px_70px_rgba(0,0,0,.25)] sm:p-8"><span className="eyebrow">{isSignup ? "Create your account" : "Customer sign in"}</span>{otpMode ? <OtpPanel phone={phone} setPhone={setPhone} code={code} setCode={setCode} submitted={submitted} setSubmitted={setSubmitted} continueTo={continueTo} onBack={() => setOtpMode(false)} /> : <><h1 className="mt-5 font-display text-4xl leading-none">{isSignup ? "Start your intelligence workspace." : "Welcome back."}</h1><p className="mt-4 text-sm leading-6 text-[#bfc3dc]">{isSignup ? "Create an account, tell us about yourself, then choose the AI domain you want to follow." : "Sign in to continue tracking your saved research and AI market intelligence."}</p><form className="mt-8" onSubmit={submitPassword}><label className="block text-xs font-semibold text-[#d9ddf3]">Email address<input name="email" type="email" autoComplete="email" className="mt-2 w-full rounded-md border border-[#30345f] bg-[#111735] px-3 py-3 text-sm text-white outline-none transition focus:border-[#8993ff]" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required /></label><label className="mt-5 block text-xs font-semibold text-[#d9ddf3]">Password<input name="password" type="password" autoComplete={isSignup ? "new-password" : "current-password"} minLength={isSignup ? 8 : undefined} className="mt-2 w-full rounded-md border border-[#30345f] bg-[#111735] px-3 py-3 text-sm text-white outline-none transition focus:border-[#8993ff]" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={isSignup ? "At least 8 characters" : "Your password"} required /></label>{!isSignup && <label className="mt-4 flex cursor-pointer items-center gap-2 text-xs text-[#bfc3dc]"><input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className="accent-[#8993ff]" />Remember this device</label>}<button className="mt-6 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-[#6c72f3] px-4 text-xs font-semibold text-white transition hover:bg-[#8187ff] disabled:cursor-not-allowed disabled:opacity-50" disabled={!canSubmit} type="submit">{isSignup ? "Create account" : "Sign in"}<ArrowRight size={15} /></button></form><div className="my-6 flex items-center gap-3 text-[10px] uppercase tracking-widest text-[#72789f]"><span className="h-px flex-1 bg-[#30345f]" />or<span className="h-px flex-1 bg-[#30345f]" /></div><button className="button w-full justify-center" type="button" onClick={() => setOtpMode(true)}>Continue with phone OTP</button><p className="mt-6 text-center text-xs text-[#a5abc9]">{isSignup ? <>Already have an account? <Link className="font-semibold text-[#aeb6ff] hover:underline" href="/login">Sign in</Link></> : <>New to Intelligence? <Link className="font-semibold text-[#aeb6ff] hover:underline" href="/signup">Create an account</Link></>}</p><p className="mt-5 flex gap-2 text-xs leading-5 text-[#8d93b6]"><LockKeyhole size={13} className="mt-0.5 shrink-0" />Your password is never stored by this prototype. Your browser can save it in its password manager.</p></>}</div></div></section></main>;
+  const sendOtp = async () => {
+    if (!email.includes("@") || loading) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}${continueTo}`,
+        }
+      });
+      if (error) throw error;
+      
+      setAuthMode("otp");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send code");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyOtp = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (code.length !== 6 || loading) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        email,
+        token: code,
+        type: "email",
+      });
+      if (error) throw error;
+      
+      router.push(continueTo);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invalid code");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const switchToOtp = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    setAuthMode("otp");
+  };
+
+  const switchToPassword = () => {
+    setAuthMode("password");
+    setCode("");
+  };
+
+  return (
+    <main className="grid min-h-screen bg-[#090b18] lg:grid-cols-[1fr_.92fr]">
+      <AuthStory />
+      <section className="flex items-center justify-center px-5 py-10 sm:px-8">
+        <div className="w-full max-w-[420px]">
+          <div className="mb-12 flex items-center justify-between">
+            <Link href={isSignup ? "/login" : "/"} className="inline-flex items-center gap-1 text-xs font-semibold text-[#a5abc9] hover:text-white">
+              <ChevronLeft size={15} />{isSignup ? "Sign in" : "Home"}
+            </Link>
+            <div className="lg:hidden"><Brand compact /></div>
+          </div>
+          <div className="rounded-2xl border border-[#30345f] bg-[#0f1430] p-6 shadow-[0_20px_70px_rgba(0,0,0,.25)] sm:p-8">
+            <span className="eyebrow">{isSignup ? "Create your account" : "Customer sign in"}</span>
+            
+            {authMode === "password" ? (
+              <>
+                <h1 className="mt-5 font-display text-4xl leading-none">
+                  {isSignup ? "Start your intelligence workspace." : "Welcome back."}
+                </h1>
+                <p className="mt-4 text-sm leading-6 text-[#bfc3dc]">
+                  {isSignup 
+                    ? "Create an account, tell us about yourself, then choose the AI domain you want to follow."
+                    : "Sign in to continue tracking your saved research and AI market intelligence."
+                  }
+                </p>
+                
+                {error && (
+                  <div className="mt-4 rounded-md border border-[#7a4b4b] bg-[#381818] p-3 text-sm text-[#e89696] flex items-center gap-2">
+                    <AlertCircle size={14} />
+                    {error}
+                  </div>
+                )}
+                
+                <form className="mt-8" onSubmit={submitPassword}>
+                  <label className="block text-xs font-semibold text-[#d9ddf3]">
+                    Email address
+                    <input
+                      name="email"
+                      type="email"
+                      autoComplete="email"
+                      className="mt-2 w-full rounded-md border border-[#30345f] bg-[#111735] px-3 py-3 text-sm text-white outline-none transition focus:border-[#8993ff]"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      placeholder="you@example.com"
+                      required
+                      disabled={loading}
+                    />
+                  </label>
+                  <label className="mt-5 block text-xs font-semibold text-[#d9ddf3]">
+                    Password
+                    <input
+                      name="password"
+                      type="password"
+                      autoComplete={isSignup ? "new-password" : "current-password"}
+                      minLength={isSignup ? 8 : undefined}
+                      className="mt-2 w-full rounded-md border border-[#30345f] bg-[#111735] px-3 py-3 text-sm text-white outline-none transition focus:border-[#8993ff]"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      placeholder="Enter your password"
+                      required
+                      disabled={loading}
+                    />
+                  </label>
+                  
+                  {isSignup && (
+                    <label className="mt-5 flex items-center gap-2 text-xs text-[#a5abc9]">
+                      <input
+                        type="checkbox"
+                        checked={remember}
+                        onChange={(event) => setRemember(event.target.checked)}
+                        className="rounded border-[#30345f] bg-[#111735] text-[#6c72f3] focus:ring-[#6c72f3]"
+                      />
+                      Remember me for 30 days
+                    </label>
+                  )}
+                  
+                  <button
+                    type="submit"
+                    disabled={!canSubmit || loading}
+                    className={`mt-8 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md px-4 text-xs font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                      loading 
+                        ? "bg-[#6c72f3] opacity-70" 
+                        : canSubmit 
+                          ? "bg-[#6c72f3] hover:bg-[#8187ff]" 
+                          : "bg-[#3a3f6b]"
+                    }`}
+                  >
+                    {loading ? (
+                      <>
+                        <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
+                        Signing in...
+                      </>
+                    ) : (
+                      <>
+                        {isSignup ? "Create account" : "Sign in"}
+                        <ArrowRight size={15} />
+                      </>
+                    )}
+                  </button>
+                </form>
+                
+                <div className="mt-6">
+                  <p className="text-center text-xs text-[#a5abc9]">
+                    Or <button onClick={switchToOtp} className="font-semibold text-[#aeb6ff] hover:underline">continue with email code</button>
+                  </p>
+                </div>
+                
+                {!isSignup && (
+                  <p className="mt-4 text-center text-xs text-[#a5abc9]">
+                    <Link href="/forgot-password" className="font-semibold text-[#aeb6ff] hover:underline">Forgot password?</Link>
+                  </p>
+                )}
+              </>
+            ) : (
+              <OtpPanel
+                email={email}
+                code={code}
+                setCode={setCode}
+                loading={loading}
+                error={error}
+                onBack={switchToPassword}
+                onVerify={verifyOtp}
+                onResend={sendOtp}
+              />
+            )}
+          </div>
+        </div>
+      </section>
+    </main>
+  );
 }
 
-function OtpPanel({ phone, setPhone, code, setCode, submitted, setSubmitted, continueTo, onBack }: { phone: string; setPhone: (value: string) => void; code: string; setCode: (value: string) => void; submitted: boolean; setSubmitted: (value: boolean) => void; continueTo: string; onBack: () => void }) {
-  const ready = phone.replace(/\D/g, "").length >= 10;
-  return submitted ? <><h1 className="mt-5 font-display text-4xl leading-none">Check your phone.</h1><p className="mt-4 text-sm leading-6 text-[#bfc3dc]">Enter the six-digit code sent to <span className="font-semibold text-white">+91 {phone}</span>.</p><input aria-label="Verification code" className="mt-8 w-full rounded-md border border-[#30345f] bg-[#111735] px-4 py-4 text-center font-mono text-xl tracking-[.45em] text-white outline-none transition focus:border-[#8993ff]" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} inputMode="numeric" autoFocus /><Link className={`mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-[#6c72f3] px-4 text-xs font-semibold text-white transition hover:bg-[#8187ff] ${code.length !== 6 ? "pointer-events-none opacity-50" : ""}`} href={continueTo}><Check size={15} />Continue</Link><button className="mt-5 w-full text-xs font-semibold text-[#aeb6ff] hover:underline" onClick={() => setSubmitted(false)}>Use a different phone number</button></> : <><h1 className="mt-5 font-display text-4xl leading-none">Continue with phone.</h1><p className="mt-4 text-sm leading-6 text-[#bfc3dc]">We’ll send a six-digit verification code to your phone.</p><label className="mt-8 block text-xs font-semibold text-[#d9ddf3]">Phone number<div className="mt-2 flex rounded-md border border-[#30345f] bg-[#111735] transition focus-within:border-[#8993ff]"><span className="border-r border-[#30345f] px-3 py-3 text-sm text-[#aeb6ff]">+91</span><input className="min-w-0 flex-1 bg-transparent px-3 py-3 text-sm text-white outline-none placeholder:text-[#72789f]" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="98765 43210" inputMode="tel" autoComplete="tel" /></div></label><button className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-[#6c72f3] px-4 text-xs font-semibold text-white transition hover:bg-[#8187ff] disabled:cursor-not-allowed disabled:opacity-50" disabled={!ready} onClick={() => setSubmitted(true)}>Send verification code <ArrowRight size={15} /></button><button className="mt-5 w-full text-xs font-semibold text-[#aeb6ff] hover:underline" onClick={onBack}>Use email and password instead</button></>;
+function OtpPanel({ 
+  email, 
+  code, 
+  setCode, 
+  loading, 
+  error, 
+  onBack, 
+  onVerify,
+  onResend
+}: { 
+  email: string;
+  code: string; 
+  setCode: (value: string) => void; 
+  loading: boolean;
+  error: string | null;
+  onBack: () => void;
+  onVerify: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  onResend: () => Promise<void>;
+}) {
+  const handleVerify = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await onVerify(event);
+  };
+
+  const handleResend = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    await onResend();
+  };
+
+  return (
+    <>
+      <h1 className="mt-5 font-display text-4xl leading-none">Check your email.</h1>
+      <p className="mt-4 text-sm leading-6 text-[#bfc3dc]">
+        Enter the six-digit code sent to <span className="font-semibold text-white">{email}</span>.
+      </p>
+      
+      {error && (
+        <div className="mt-4 rounded-md border border-[#7a4b4b] bg-[#381818] p-3 text-sm text-[#e89696] flex items-center gap-2">
+          <AlertCircle size={14} />
+          {error}
+        </div>
+      )}
+      
+      <form onSubmit={handleVerify} className="mt-6">
+        <input
+          aria-label="Verification code"
+          className="w-full rounded-md border border-[#30345f] bg-[#111735] px-4 py-4 text-center font-mono text-xl tracking-[.45em] text-white outline-none transition focus:border-[#8993ff]"
+          maxLength={6}
+          value={code}
+          onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
+          inputMode="numeric"
+          autoFocus
+          disabled={loading}
+        />
+        <button
+          type="submit"
+          disabled={code.length !== 6 || loading}
+          className={`mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md px-4 text-xs font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${
+            code.length === 6 ? "bg-[#6c72f3] hover:bg-[#8187ff]" : "bg-[#3a3f6b]"
+          }`}
+        >
+          {loading ? "Verifying..." : "Continue"}
+          <Check size={15} />
+        </button>
+      </form>
+      
+      <div className="mt-5 flex items-center justify-between">
+        <button 
+          type="button" 
+          onClick={onBack} 
+          className="text-xs font-semibold text-[#aeb6ff] hover:underline"
+          disabled={loading}
+        >
+          ← Use password instead
+        </button>
+        <button
+          type="button"
+          onClick={handleResend}
+          disabled={loading}
+          className="text-xs font-semibold text-[#aeb6ff] hover:underline disabled:opacity-50"
+        >
+          Resend code
+        </button>
+      </div>
+    </>
+  );
 }
 
-function AuthStory() { return <section className="relative hidden overflow-hidden border-r border-[#282d5b] bg-[#0d1025] p-10 text-white lg:flex lg:flex-col"><div className="pointer-events-none absolute -left-28 top-1/3 h-96 w-96 rounded-full bg-[#5961d4]/20 blur-3xl" /><Brand /><div className="relative my-auto max-w-lg"><p className="font-mono text-[10px] font-semibold uppercase tracking-[.14em] text-[#aeb6ff]">Your market intelligence workspace</p><h2 className="mt-5 font-display text-6xl leading-[.94]">Stay close to the market.<br /><em className="text-[#aeb6ff]">Keep your context.</em></h2><p className="mt-7 max-w-md text-sm leading-7 text-[#bfc3dc]">Track investment, market patterns, and source-backed intelligence from the domain you choose.</p><div className="mt-10 grid max-w-md grid-cols-3 gap-3">{[["Signals", "Evidence-first"], ["Capital", "Company tracking"], ["Memory", "Saved context"]].map(([label, detail]) => <div className="rounded-lg border border-[#30345f] bg-[#111735]/80 p-3" key={label}><Sparkles size={14} className="text-[#aeb6ff]" /><p className="mt-4 text-xs font-semibold">{label}</p><p className="mt-1 text-[10px] leading-4 text-[#a5abc9]">{detail}</p></div>)}</div></div><div className="relative flex items-center gap-2 border-t border-[#30345f] pt-5 text-xs text-[#a5abc9]"><ShieldCheck size={15} className="text-[#aeb6ff]" />Private workspace data · Evidence lineage retained</div></section>; }
+function AuthStory() { 
+  return (
+    <section className="relative hidden overflow-hidden border-r border-[#282d5b] bg-[#0d1025] p-10 text-white lg:flex lg:flex-col">
+      <div className="pointer-events-none absolute -left-28 top-1/3 h-96 w-96 rounded-full bg-[#5961d4]/20 blur-3xl" />
+      <Brand />
+      <div className="relative my-auto max-w-lg">
+        <p className="font-mono text-[10px] font-semibold uppercase tracking-[.14em] text-[#aeb6ff]">
+          Your market intelligence workspace
+        </p>
+        <h2 className="mt-5 font-display text-6xl leading-[.94]">
+          Stay close to the market.<br />
+          <em className="text-[#aeb6ff]">Keep your context.</em>
+        </h2>
+        <p className="mt-7 max-w-md text-sm leading-7 text-[#bfc3dc]">
+          Track investment, market patterns, and source-backed intelligence from the domain you choose.
+        </p>
+        <div className="mt-10 grid max-w-md grid-cols-3 gap-3">
+          {[
+            ["Signals", "Evidence-first"], 
+            ["Capital", "Company tracking"], 
+            ["Memory", "Saved context"]
+          ].map(([label, detail]) => (
+            <div key={label} className="rounded-lg border border-[#30345f] bg-[#111735]/80 p-3">
+              <Sparkles size={14} className="text-[#aeb6ff]" />
+              <p className="mt-4 text-xs font-semibold">{label}</p>
+              <p className="mt-1 text-[10px] leading-4 text-[#a5abc9]">{detail}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="relative flex items-center gap-2 border-t border-[#30345f] pt-5 text-xs text-[#a5abc9]">
+        <ShieldCheck size={15} className="text-[#aeb6ff]" />
+        Private workspace data · Evidence lineage retained
+      </div>
+    </section>
+  ); 
+}
 
-function Brand({ compact = false }: { compact?: boolean }) { return <Link href="/login" className="flex items-center gap-2.5"><span className="grid h-8 w-8 place-items-center rounded-sm border border-[#8993ff] font-display text-2xl text-[#aeb6ff]">i</span>{!compact && <span className="text-[13px] font-bold">intelligence<span className="text-[#8993ff]">.</span></span>}</Link>; }
+function Brand({ compact = false }: { compact?: boolean }) { 
+  return (
+    <Link href="/login" className="flex items-center gap-2.5">
+      <span className="grid h-8 w-8 place-items-center rounded-sm border border-[#8993ff] font-display text-2xl text-[#aeb6ff]">i</span>
+      {!compact && <span className="text-[13px] font-bold">intelligence<span className="text-[#8993ff]">.</span></span>}
+    </Link>
+  ); 
+}

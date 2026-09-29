@@ -4,23 +4,28 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Layers3 } from "lucide-react";
 import { fetchPatterns } from "@/lib/api/intelligence";
-import { demoPatterns } from "@/lib/mock-data/demo-intelligence";
 import { Pattern } from "@/types/intelligence";
+import { useWorkspace } from "@/lib/hooks/workspace";
 
 export function Patterns({ id }: { id?: string }) {
+  const { workspace, workspaceDomain, isLoading: workspaceLoading } = useWorkspace();
   const [patterns, setPatterns] = useState<Pattern[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const workspaceId = workspace?.id;
+  const workspaceDomainId = workspaceDomain?.id;
+
   useEffect(() => {
     async function loadPatterns() {
+      if (!workspaceId || !workspaceDomainId) {
+        setError("No workspace or domain configured");
+        setLoading(false);
+        return;
+      }
+
       try {
-        const workspaceId = typeof window !== 'undefined' ? localStorage.getItem('workspace_id') || '' : '';
-        if (!workspaceId) {
-          setPatterns(demoPatterns);
-          return;
-        }
-        const { data } = await fetchPatterns({ workspace_id: workspaceId, limit: 100 });
+        const { data } = await fetchPatterns({ workspace_id: workspaceId, domain_id: workspaceDomainId, limit: 100 });
         setPatterns(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load patterns');
@@ -28,11 +33,15 @@ export function Patterns({ id }: { id?: string }) {
         setLoading(false);
       }
     }
-    loadPatterns();
-  }, []);
 
-  if (loading) return <div className="space-y-9">Loading patterns...</div>;
+    if (!workspaceLoading) {
+      loadPatterns();
+    }
+  }, [workspaceId, workspaceDomainId, workspaceLoading]);
+
+  if (workspaceLoading || loading) return <div className="space-y-9">Loading patterns...</div>;
   if (error) return <div className="space-y-9"><p className="text-sm text-[#d0b2ed]">Live patterns could not load. Check the workspace connection and try again.</p></div>;
+  if (!workspace || !workspaceDomain) return <div className="space-y-9 p-6">Please complete onboarding to set up your workspace.</div>;
 
   if (id) {
     const pattern = patterns.find((p) => p.id === id) || patterns[0];
@@ -49,22 +58,28 @@ export function Patterns({ id }: { id?: string }) {
         </p>
       </header>
       <div className="grid gap-4 lg:grid-cols-2">
-        {patterns.map((item) => (
-          <Link href={`/patterns/${item.id}`} className="surface group p-6 transition hover:-translate-y-0.5 hover:border-[#7076f6]" key={item.id}>
-            <div className="flex items-start justify-between">
-              <span className="rounded border border-[#4b559b] bg-[#182048] px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-[#b9c0ff]">
-                Strength {Math.round(item.strength_score * 100)}
-              </span>
-              <Layers3 size={17} className="text-[#aeb6ff]" />
-            </div>
-            <h2 className="mt-5 font-display text-3xl leading-tight group-hover:text-[#c2c7ff]">{item.statement}</h2>
-            <div className="mt-7 grid grid-cols-3 border-t border-[#30345f] pt-4 font-mono text-[10px] text-[#a5abc9]">
-              <span>{item.time_window_start ? new Date(item.time_window_start).toLocaleDateString() : 'N/A'} - {item.time_window_end ? new Date(item.time_window_end).toLocaleDateString() : 'N/A'}</span>
-              <span>{(item.metadata?.observation_count as number | undefined) ?? 0} observations</span>
-              <span>{item.metadata?.has_contradictions === true ? 'Has counter-signals' : '0 counter-signals'}</span>
-            </div>
-          </Link>
-        ))}
+        {patterns.length === 0 ? (
+          <div className="col-span-2 surface p-12 text-center text-[#a5abc9]">
+            No patterns yet. Patterns emerge from multiple observations across your domain.
+          </div>
+        ) : (
+          patterns.map((item) => (
+            <Link href={`/patterns/${item.id}`} className="surface group p-6 transition hover:-translate-y-0.5 hover:border-[#7076f6]" key={item.id}>
+              <div className="flex items-start justify-between">
+                <span className="rounded border border-[#4b559b] bg-[#182048] px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-[#b9c0ff]">
+                  Strength {Math.round(item.strength_score * 100)}
+                </span>
+                <Layers3 size={17} className="text-[#aeb6ff]" />
+              </div>
+              <h2 className="mt-5 font-display text-3xl leading-tight group-hover:text-[#c2c7ff]">{item.statement}</h2>
+              <div className="mt-7 grid grid-cols-3 border-t border-[#30345f] pt-4 font-mono text-[10px] text-[#a5abc9]">
+                <span>{item.time_window_start ? new Date(item.time_window_start).toLocaleDateString() : 'N/A'} - {item.time_window_end ? new Date(item.time_window_end).toLocaleDateString() : 'N/A'}</span>
+                <span>{(item.metadata?.observation_count as number | undefined) ?? 0} observations</span>
+                <span>{item.metadata?.has_contradictions === true ? 'Has counter-signals' : '0 counter-signals'}</span>
+              </div>
+            </Link>
+          ))
+        )}
       </div>
     </div>
   );

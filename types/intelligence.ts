@@ -40,6 +40,8 @@ export interface Evidence {
   excerpt: string
   confidence: number
   source: Source
+  verification_status?: string
+  evidence_type?: string
 }
 
 export interface Source {
@@ -54,6 +56,9 @@ export interface Entity {
   name: string
   entity_type: string
   attributes: Record<string, unknown>
+  canonical_url?: string | null
+  resolution_status?: string
+  wikidata_qid?: string | null
 }
 
 export interface Observation {
@@ -290,6 +295,7 @@ export interface ResearchQualityRun {
   failed_llm_calls: number
   estimated_cost_usd: number
   discovery_provider_error_count: number
+  metrics?: Record<string, unknown>
 }
 
 export interface EvidenceReviewQueueItem {

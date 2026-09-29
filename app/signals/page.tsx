@@ -1,12 +1,16 @@
 'use client'
 
 import { useEffect, useState } from "react";
-import { useSignals, useObservations } from "@/lib/hooks/intelligence";
+import { useSignals } from "@/lib/hooks/intelligence";
 import { Signal } from "@/types/intelligence";
+import { useWorkspace } from "@/lib/hooks/workspace";
 
 export default function SignalsPage() {
-  const workspaceId = typeof window !== 'undefined' ? localStorage.getItem('workspace_id') || '' : '';
-  const { signals, isLoading: loading, error, mutate } = useSignals(workspaceId, undefined, 'draft', 100);
+  const { workspace, workspaceDomain, isLoading: workspaceLoading } = useWorkspace();
+  const workspaceId = workspace?.id;
+  const workspaceDomainId = workspaceDomain?.id;
+  
+  const { signals, isLoading: loading, error, mutate } = useSignals(workspaceId || "", workspaceDomainId, 'draft', 100);
   const [reviewing, setReviewing] = useState<string | null>(null);
   const [reviewDecision, setReviewDecision] = useState<'accepted' | 'rejected'>('accepted');
 
@@ -25,8 +29,10 @@ export default function SignalsPage() {
     }
   };
 
+  if (workspaceLoading) return <div className="space-y-9 p-6">Loading workspace...</div>;
   if (loading) return <div className="space-y-9 p-6">Loading signals...</div>;
   if (error) return <div className="space-y-9 p-6">Error: {error}</div>;
+  if (!workspace || !workspaceDomain) return <div className="space-y-9 p-6">Please complete onboarding to set up your workspace.</div>;
 
   const draftSignals = signals.filter(s => s.status === 'draft');
   const acceptedSignals = signals.filter(s => s.status === 'accepted');

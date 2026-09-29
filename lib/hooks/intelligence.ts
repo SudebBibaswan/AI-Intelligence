@@ -2,7 +2,7 @@
 
 import useSWR from 'swr'
 import { fetchSignals, fetchObservations, fetchPatterns, fetchTheses, fetchHypotheses, fetchValidations, fetchCapitalFlow, fetchCapitalDirectory, fetchQualitySnapshots, fetchEvidenceReviewQueue, fetchInvestments } from '@/lib/api/intelligence'
-import { Signal, Observation, Pattern, Thesis, Hypothesis, ValidationRun, CapitalFlowMapping, CapitalDirectoryEntry, QualitySnapshot } from '@/types/intelligence'
+import { Signal, Observation, Pattern, Thesis, Hypothesis, ValidationRun, CapitalFlowMapping, CapitalDirectoryEntry, QualitySnapshot, ResearchQualityRun } from '@/types/intelligence'
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 
@@ -155,6 +155,20 @@ export function useInvestments(workspaceId: string, domainId?: string, limit = 5
   return {
     investments: (data?.data as any[]) || [],
     count: data?.count || 0,
+    isLoading,
+    error,
+    mutate
+  }
+}
+
+export function useResearchRuns(workspaceId: string, limit = 20) {
+  const { data, error, isLoading, mutate } = useSWR<{ data: ResearchQualityRun[] }>(
+    workspaceId ? `/api/intelligence/trigger?workspace_id=${workspaceId}&limit=${limit}` : null,
+    fetcher
+  )
+  return {
+    runs: (data?.data as any[]) || [],
+    count: data?.data?.length || 0,
     isLoading,
     error,
     mutate
