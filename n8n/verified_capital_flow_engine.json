@@ -1,0 +1,616 @@
+{
+  "name": "RE-Capital - Verified Capital Flow Engine",
+  "nodes": [
+    {
+      "id": "fdc7d8fb-0000-4000-8000-630522d80169",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        240
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "9e5bc79b-0000-4000-8000-8751afe2f2d3",
+      "name": "Daily Capital Flow",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "6229be4b-0000-4000-8000-0a7a922a6454",
+      "name": "Capital Flow Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: {\n  supabase_url: 'https://jaeltkzfjgrzgxgzxlfs.supabase.co',\n  workspace_id: 'a51b8277-4cd5-4f8a-9ffd-4ddbe56683da',\n  workspace_domain_id: '11068f00-2e6b-462c-b455-c69384e5e8a8',\n  min_pattern_strength: 0.5,\n  max_patterns: 50,\n  model: 'gpt-6-luna',\n  engine_version: 'capital-flow-engine-v1.0.0'\n} }];"
+      }
+    },
+    {
+      "id": "f0fbcbf1-0000-4000-8000-c3eabbef8be9",
+      "name": "Load Pattern-Entity Candidates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        320
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.supabase_url + '/rest/v1/rpc/n8n_list_capital_flow_candidates' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_workspace_id: $json.workspace_id, p_workspace_domain_id: $json.workspace_domain_id, p_min_pattern_strength: $json.min_pattern_strength, p_max_patterns: $json.max_patterns }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "61f1bc7c-0000-4000-8000-4177052f1f22",
+      "name": "Group by Entity",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const config = $('Capital Flow Configuration').first().json;\nconst rows = $input.all().flatMap((item) => Array.isArray(item.json) ? item.json : [item.json])\n  .filter((row) => row && row.pattern_id && row.entity_id);\nif (!rows.length) return [{ json: { config, no_matches: true, entity_items: [] } }];\nconst groups = new Map();\nfor (const row of rows) {\n  const key = row.entity_id;\n  if (!groups.has(key)) groups.set(key, { config, no_matches: false, workspace_id: config.workspace_id,\n    workspace_domain_id: config.workspace_domain_id, entity_id: key, entity_name: row.entity_name,\n    entity_type: row.entity_type, entity_metadata: row.entity_metadata, pattern_items: [] });\n  groups.get(key).pattern_items.push({ pattern_id: row.pattern_id, pattern_type: row.pattern_type,\n    pattern_title: row.pattern_title, pattern_statement: row.pattern_statement,\n    pattern_strength_score: row.pattern_strength_score, pattern_persistence_score: row.pattern_persistence_score,\n    pattern_diversity_score: row.pattern_diversity_score, pattern_confidence: row.pattern_confidence,\n    pattern_status: row.pattern_status, time_window_start: row.time_window_start,\n    time_window_end: row.time_window_end, observation_count: row.observation_count,\n    source_family_count: row.source_family_count, event_entity_count: row.event_entity_count,\n    thesis_id: row.thesis_id, thesis_type: row.thesis_type, thesis_statement: row.thesis_statement,\n    thesis_confidence: row.thesis_confidence, thesis_methodology: row.thesis_methodology,\n    match_type: row.match_type, match_confidence: row.match_confidence });\n}\nreturn [...groups.values()].map((pack) => ({ json: { ...pack, pattern_count: pack.pattern_items.length } }));"
+      }
+    },
+    {
+      "id": "296a75ae-0000-4000-8000-801e3fb62934",
+      "name": "Entity Capital Flow Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        960,
+        320
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "929f4b01-0000-4000-8000-e7dface37297",
+      "name": "Has Pattern Matches?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        440
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9914dc25-0000-4000-8000-fe9288089c22",
+              "leftValue": "={{ $json.no_matches !== true && $json.pattern_items.length >= 1 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "eb23973d-0000-4000-8000-58989b3a9424",
+      "name": "Build Capital Flow Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        340
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pack = $input.first().json;\nconst mapping = { type: 'object', additionalProperties: false, properties: {\n  pattern_id: { type: 'string' }, entity_id: { type: 'string' }, thesis_id: { type: 'string' },\n  match_type: { type: 'string', enum: ['revealed_thesis_match','stated_thesis_match','pattern_entity_overlap','thesis_driven'] },\n  match_confidence: { type: 'number' }, capital_direction: { type: 'string', enum: ['inflow','outflow','bidirectional'] },\n  sector_tags: { type: 'array', items: { type: 'string' } },\n  stage_tags: { type: 'array', items: { type: 'string' } },\n  geography_tags: { type: 'array', items: { type: 'string' } },\n  check_size_min_usd: { type: 'number' }, check_size_max_usd: { type: 'number' },\n  deal_count: { type: 'integer' }, confidence: { type: 'number' }\n}, required: ['pattern_id','entity_id','match_type','match_confidence','capital_direction','confidence'] };\nconst schema = { type: 'object', additionalProperties: false, properties: {\n  mappings: { type: 'array', maxItems: 10, items: mapping }\n}, required: ['mappings'] };\nconst entityPack = { entity_name: pack.entity_name, entity_type: pack.entity_type,\n  entity_metadata: pack.entity_metadata, pattern_items: pack.pattern_items };\nreturn [{ json: { ...pack, openai_request: { model: pack.config.model, store: false, max_output_tokens: 2000,\n  instructions: 'Map patterns to this VC/YC entity. For each pattern, determine capital direction (inflow=entity invests in this pattern, outflow=entity divests, bidirectional=both). Infer sector/stage/geography tags. Estimate check sizes and deal count from thesis methodology. Return high-confidence mappings only.',\n  input: [{ role: 'user', content: [{ type: 'input_text', text: JSON.stringify(entityPack) }] }],\n  text: { format: { type: 'json_schema', name: 'entity_capital_flow_mappings', strict: true, schema } }\n} } }];"
+      }
+    },
+    {
+      "id": "83ad4d2a-0000-4000-8000-d113b57ab5b4",
+      "name": "OpenAI Capital Flow Mapping",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        340
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.openai_request) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "7a0hdZ68ejgk6EnD",
+          "name": "OpenAI account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "2d4e0569-0000-4000-8000-f84d4933ffb1",
+      "name": "Validate Capital Flow Mappings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        340
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pack = $('Build Capital Flow Request').item.json;\nconst response = $input.first().json ?? {};\nconst outputText = (response.output ?? []).flatMap((item) => item.content ?? []).find((item) => item.type === 'output_text')?.text;\nlet parsed = null;\ntry { if (outputText) parsed = JSON.parse(outputText); } catch {}\nconst patternById = new Map(pack.pattern_items.map((item) => [item.pattern_id, item]));\nconst normalizeText = (value, max) => {\n  const raw = String(value ?? '');\n  let output = '';\n  let pendingSpace = false;\n  for (const character of raw) {\n    if (character.trim() === '') { pendingSpace = output.length > 0; continue; }\n    if (pendingSpace) output += ' ';\n    output += character;\n    pendingSpace = false;\n    if (output.length >= max) break;\n  }\n  return output.trim().slice(0, max);\n};\nconst valid = [];\nlet rejected = 0;\nfor (const candidate of (Array.isArray(parsed?.mappings) ? parsed.mappings : [])) {\n  const patternRef = patternById.get(candidate.pattern_id);\n  if (!patternRef) { rejected++; continue; }\n  const matchType = ['revealed_thesis_match','stated_thesis_match','pattern_entity_overlap','thesis_driven'].includes(candidate.match_type)\n    ? candidate.match_type : 'pattern_entity_overlap';\n  const capitalDirection = ['inflow','outflow','bidirectional'].includes(candidate.capital_direction)\n    ? candidate.capital_direction : 'inflow';\n  const matchConfidence = Math.max(0, Math.min(1, Number(candidate.match_confidence ?? 0)));\n  const confidence = Math.max(0, Math.min(1, Number(candidate.confidence ?? 0)));\n  const sectorTags = (Array.isArray(candidate.sector_tags) ? candidate.sector_tags : []).map(t => normalizeText(t, 100)).filter(Boolean);\n  const stageTags = (Array.isArray(candidate.stage_tags) ? candidate.stage_tags : []).map(t => normalizeText(t, 100)).filter(Boolean);\n  const geographyTags = (Array.isArray(candidate.geography_tags) ? candidate.geography_tags : []).map(t => normalizeText(t, 100)).filter(Boolean);\n  const dealCount = Math.max(1, Number(candidate.deal_count ?? 1));\n  const checkMin = candidate.check_size_min_usd ? Math.max(0, Number(candidate.check_size_min_usd)) : null;\n  const checkMax = candidate.check_size_max_usd ? Math.max(0, Number(candidate.check_size_max_usd)) : null;\n  if (matchConfidence < 0.4 || confidence < 0.4) { rejected++; continue; }\n  valid.push({ p_mapping: { workspace_id: pack.workspace_id, workspace_domain_id: pack.workspace_domain_id,\n    pattern_id: candidate.pattern_id, entity_id: pack.entity_id,\n    thesis_id: candidate.thesis_id ?? null, match_type: matchType,\n    match_confidence: matchConfidence, capital_direction: capitalDirection,\n    sector_tags: sectorTags, stage_tags: stageTags, geography_tags: geographyTags,\n    check_size_min_usd: checkMin, check_size_max_usd: checkMax, deal_count: dealCount,\n    confidence: confidence,\n    engine_version: pack.config.engine_version, metadata: { generation_mode: 'capital_flow_mapping',\n      entity_name: pack.entity_name, input_pattern_count: 1 } }\n  });\n}\nif (!valid.length) return [{ json: { no_mapping: true, entity_id: pack.entity_id, entity_name: pack.entity_name,\n  candidates_rejected: rejected, openai_calls: 1 } }];\nreturn valid.map((item) => ({ json: { ...item, no_mapping: false, candidates_rejected: rejected, openai_calls: 1 } }));"
+      }
+    },
+    {
+      "id": "f5194d0a-0000-4000-8000-25f3aab14fbb",
+      "name": "Mapping Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2160,
+        340
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "46316a60-0000-4000-8000-6436cdca0c72",
+      "name": "Has Valid Mapping?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2400,
+        460
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "39ecda35-0000-4000-8000-1a9a94e58c1b",
+              "leftValue": "={{ $json.no_mapping !== true && Boolean($json.p_mapping) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c7fc0eee-0000-4000-8000-f3e0ea9a9103",
+      "name": "Persist Capital Flow Mapping",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        340
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Capital Flow Configuration').item.json.supabase_url + '/rest/v1/rpc/n8n_upsert_capital_flow_mapping' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_mapping: $json.p_mapping }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "7636a6e8-0000-4000-8000-a71a87e42d5d",
+      "name": "Mapping Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        340
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const response = $input.first().json ?? {};\nconst result = Array.isArray(response) ? (response[0] ?? {}) : response;\nreturn [{ json: { completed: true, mapping_id: result.mapping_id ?? null,\n  pattern_id: result.pattern_id ?? null, entity_id: result.entity_id ?? null,\n  match_type: result.match_type ?? null, confidence: Number(result.confidence ?? 0) } }];"
+      }
+    },
+    {
+      "id": "9c6e3479-0000-4000-8000-14f4265c30b3",
+      "name": "Skipped Mapping",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        580
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const row = $input.first().json;\nreturn [{ json: { completed: false, skipped: true, entity_id: row.entity_id, entity_name: row.entity_name,\n  candidates_rejected: Number(row.candidates_rejected ?? 0), openai_calls: Number(row.openai_calls ?? 0) } }];"
+      }
+    },
+    {
+      "id": "82ddfe2c-0000-4000-8000-6b5521ed2565",
+      "name": "Entity Capital Flow Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        180
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map((item) => item.json ?? {});\nconst completed = rows.filter(r => r.completed);\nreturn [{ json: { entity_completed: true, entity_id: rows[0]?.entity_id, entity_name: rows[0]?.entity_name,\n  mappings_persisted: completed.length, new_mappings: completed.filter(r => r.is_new).length,\n  candidates_rejected: rows.reduce((sum, r) => sum + Number(r.candidates_rejected ?? 0), 0),\n  openai_calls: rows.reduce((sum, r) => sum + Number(r.openai_calls ?? 0), 0) } }];"
+      }
+    },
+    {
+      "id": "a6f78b85-0000-4000-8000-3c85045e7061",
+      "name": "No Matches Entity Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        600
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: { entity_completed: true, no_matches: true, entity_id: $json.entity_id, entity_name: $json.entity_name,\n  mappings_persisted: 0 } }];"
+      }
+    },
+    {
+      "id": "66ef10cb-0000-4000-8000-bf8c99603c72",
+      "name": "Capital Flow Engine Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        120
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map((item) => item.json ?? {});\nreturn [{ json: { status: 'completed',\n  entities_processed: rows.filter(r => !r.no_matches).length,\n  no_matches_entities: rows.filter(r => r.no_matches).length,\n  mappings_persisted: rows.reduce((sum, r) => sum + Number(r.mappings_persisted ?? 0), 0),\n  new_mappings: rows.reduce((sum, r) => sum + Number(r.new_mappings ?? 0), 0),\n  candidates_rejected: rows.reduce((sum, r) => sum + Number(r.candidates_rejected ?? 0), 0),\n  openai_calls: rows.reduce((sum, r) => sum + Number(r.openai_calls ?? 0), 0),\n  output_status: 'draft', note: 'Capital flow mapping complete. Patterns mapped to VC/YC entities with capital direction, sector/stage/geography tags, and check size estimates.' } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Capital Flow Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Capital Flow": {
+      "main": [
+        [
+          {
+            "node": "Capital Flow Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capital Flow Configuration": {
+      "main": [
+        [
+          {
+            "node": "Load Pattern-Entity Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Pattern-Entity Candidates": {
+      "main": [
+        [
+          {
+            "node": "Group by Entity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Group by Entity": {
+      "main": [
+        [
+          {
+            "node": "Entity Capital Flow Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entity Capital Flow Loop": {
+      "main": [
+        [
+          {
+            "node": "Capital Flow Engine Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Pattern Matches?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Pattern Matches?": {
+      "main": [
+        [
+          {
+            "node": "Build Capital Flow Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Matches Entity Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Capital Flow Request": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Capital Flow Mapping",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Capital Flow Mapping": {
+      "main": [
+        [
+          {
+            "node": "Validate Capital Flow Mappings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Capital Flow Mappings": {
+      "main": [
+        [
+          {
+            "node": "Mapping Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mapping Loop": {
+      "main": [
+        [
+          {
+            "node": "Entity Capital Flow Complete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Valid Mapping?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Valid Mapping?": {
+      "main": [
+        [
+          {
+            "node": "Persist Capital Flow Mapping",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skipped Mapping",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Capital Flow Mapping": {
+      "main": [
+        [
+          {
+            "node": "Mapping Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mapping Complete": {
+      "main": [
+        [
+          {
+            "node": "Entity Capital Flow Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skipped Mapping": {
+      "main": [
+        [
+          {
+            "node": "Entity Capital Flow Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entity Capital Flow Complete": {
+      "main": [
+        [
+          {
+            "node": "Entity Capital Flow Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Matches Entity Complete": {
+      "main": [
+        [
+          {
+            "node": "Entity Capital Flow Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "tags": [],
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionTimeout": 1800
+  }
+}

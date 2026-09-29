@@ -1,0 +1,759 @@
+{
+  "name": "RE-Thesis - Verified Thesis Extraction Engine",
+  "nodes": [
+    {
+      "id": "e9e5039e-0000-4000-8000-0582bf5e0e55",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        240
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "63727ce5-0000-4000-8000-3bab6b5ef0de",
+      "name": "Daily Thesis Extraction",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "6a8bed1f-0000-4000-8000-939530587588",
+      "name": "Thesis Engine Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: {\n  supabase_url: 'https://jaeltkzfjgrzgxgzxlfs.supabase.co',\n  workspace_id: 'a51b8277-4cd5-4f8a-9ffd-4ddbe56683da',\n  workspace_domain_id: '11068f00-2e6b-462c-b455-c69384e5e8a8',\n  entity_types: ['organization'],\n  max_evidence_per_entity: 20,\n  model: 'gpt-6-luna',\n  engine_version: 'thesis-engine-v1.0.0'\n} }];"
+      }
+    },
+    {
+      "id": "5dcf16e3-0000-4000-8000-fce36a29a2d3",
+      "name": "Load Thesis Evidence Candidates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        320
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.supabase_url + '/rest/v1/rpc/n8n_list_thesis_evidence_candidates' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_workspace_id: $json.workspace_id, p_workspace_domain_id: $json.workspace_domain_id, p_entity_types: $json.entity_types, p_max_evidence_per_entity: $json.max_evidence_per_entity }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "c189e8ef-0000-4000-8000-4ba53fd47e09",
+      "name": "Group Evidence by Entity",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const config = $('Thesis Engine Configuration').first().json;\nconst rows = $input.all().flatMap((item) => Array.isArray(item.json) ? item.json : [item.json])\n  .filter((row) => row && row.entity_id && row.evidence_id);\nif (!rows.length) return [{ json: { config, no_evidence: true, entity_items: [] } }];\nconst groups = new Map();\nfor (const row of rows) {\n  const key = row.entity_id;\n  if (!groups.has(key)) groups.set(key, { config, no_evidence: false, workspace_id: row.workspace_id,\n    workspace_domain_id: config.workspace_domain_id, entity_id: key, entity_name: row.entity_name,\n    entity_type: row.entity_type, entity_metadata: row.entity_metadata, evidence_items: [] });\n  groups.get(key).evidence_items.push({ evidence_id: row.evidence_id, source_id: row.source_id,\n    source_title: row.source_title, canonical_url: row.canonical_url, publisher: row.publisher,\n    published_at: row.published_at, source_type: row.source_type, source_quality_score: row.source_quality_score,\n    evidence_type: row.evidence_type, claim_text: row.claim_text, excerpt: row.excerpt,\n    polarity: row.polarity, confidence: row.confidence, linked_entities: row.linked_entities });\n}\nreturn [...groups.values()].map((pack) => ({ json: { ...pack, evidence_count: pack.evidence_items.length } }));"
+      }
+    },
+    {
+      "id": "f7c844b1-0000-4000-8000-e8f40126f6f9",
+      "name": "Entity Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        960,
+        320
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "69959452-0000-4000-8000-16c30ed91bab",
+      "name": "Has Evidence for Entity?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        440
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "55114dc2-0000-4000-8000-2c19045c7f33",
+              "leftValue": "={{ $json.no_evidence !== true && $json.evidence_items.length >= 3 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "87adedea-0000-4000-8000-bb8c46d2259d",
+      "name": "Build Stated Thesis Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        240
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pack = $input.first().json;\nconst evidenceRef = { type: 'object', additionalProperties: false, properties: {\n  evidence_id: { type: 'string' }, role: { type: 'string', enum: ['supporting','contradicting','context'] },\n  weight: { type: 'number' }\n}, required: ['evidence_id','role','weight'] };\nconst thesis = { type: 'object', additionalProperties: false, properties: {\n  thesis_type: { type: 'string', enum: ['stated'] },\n  statement: { type: 'string' },\n  time_window_start: { type: 'string' }, time_window_end: { type: 'string' },\n  methodology: { type: 'string' }, confidence: { type: 'number' },\n  evidence: { type: 'array', minItems: 1, maxItems: 20, items: evidenceRef }\n}, required: ['thesis_type','statement','methodology','confidence','evidence'] };\nconst schema = { type: 'object', additionalProperties: false, properties: {\n  theses: { type: 'array', maxItems: 1, items: thesis }\n}, required: ['theses'] };\nconst entityPack = { entity_name: pack.entity_name, entity_type: pack.entity_type,\n  entity_metadata: pack.entity_metadata, evidence_items: pack.evidence_items };\nreturn [{ json: { ...pack, openai_request: { model: pack.config.model, store: false, max_output_tokens: 2000,\n  instructions: 'Extract the STATED thesis (what this entity publicly claims as their investment thesis) from the supplied evidence. Only use direct quotes, public statements, blog posts, interviews, tweets, or official communications. Do not infer from investments. If no clear stated thesis exists, return empty array.',\n  input: [{ role: 'user', content: [{ type: 'input_text', text: JSON.stringify(entityPack) }] }],\n  text: { format: { type: 'json_schema', name: 'entity_stated_thesis', strict: true, schema } }\n} } }];"
+      }
+    },
+    {
+      "id": "2612e7af-0000-4000-8000-20c0f14b361c",
+      "name": "Build Revealed Thesis Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        440
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pack = $input.first().json;\nconst evidenceRef = { type: 'object', additionalProperties: false, properties: {\n  evidence_id: { type: 'string' }, role: { type: 'string', enum: ['supporting','contradicting','context'] },\n  weight: { type: 'number' }\n}, required: ['evidence_id','role','weight'] };\nconst thesis = { type: 'object', additionalProperties: false, properties: {\n  thesis_type: { type: 'string', enum: ['revealed'] },\n  statement: { type: 'string' },\n  time_window_start: { type: 'string' }, time_window_end: { type: 'string' },\n  methodology: { type: 'string' }, confidence: { type: 'number' },\n  evidence: { type: 'array', minItems: 1, maxItems: 20, items: evidenceRef }\n}, required: ['thesis_type','statement','methodology','confidence','evidence'] };\nconst schema = { type: 'object', additionalProperties: false, properties: {\n  theses: { type: 'array', maxItems: 1, items: thesis }\n}, required: ['theses'] };\nconst entityPack = { entity_name: pack.entity_name, entity_type: pack.entity_type,\n  entity_metadata: pack.entity_metadata, evidence_items: pack.evidence_items };\nreturn [{ json: { ...pack, openai_request: { model: pack.config.model, store: false, max_output_tokens: 2000,\n  instructions: 'Extract the REVEALED thesis (what this entity's actual investments reveal about their true thesis) from the supplied evidence. Analyze investment patterns: sectors, stages, geographies, check sizes, follow-on behavior. Infer thesis from behavior, not statements. If investments are too sparse or diverse, return empty array.',\n  input: [{ role: 'user', content: [{ type: 'input_text', text: JSON.stringify(entityPack) }] }],\n  text: { format: { type: 'json_schema', name: 'entity_revealed_thesis', strict: true, schema } }\n} } }];"
+      }
+    },
+    {
+      "id": "19040e5e-0000-4000-8000-3919e586e2fa",
+      "name": "OpenAI Stated Thesis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        240
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.openai_request) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "7a0hdZ68ejgk6EnD",
+          "name": "OpenAI account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "84fd4b58-0000-4000-8000-00697cbc3865",
+      "name": "OpenAI Revealed Thesis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        440
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.openai_request) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "7a0hdZ68ejgk6EnD",
+          "name": "OpenAI account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "e7fef005-0000-4000-8000-daa05d8bb982",
+      "name": "Validate Stated Thesis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        240
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pack = $('Build Stated Thesis Request').item.json;\nconst response = $input.first().json ?? {};\nconst outputText = (response.output ?? []).flatMap((item) => item.content ?? []).find((item) => item.type === 'output_text')?.text;\nlet parsed = null;\ntry { if (outputText) parsed = JSON.parse(outputText); } catch {}\nconst entityPack = { entity_id: pack.entity_id, entity_name: pack.entity_name, evidence_items: pack.evidence_items };\nconst normalizeText = (value, max) => {\n  const raw = String(value ?? '');\n  let output = '';\n  let pendingSpace = false;\n  for (const character of raw) {\n    if (character.trim() === '') { pendingSpace = output.length > 0; continue; }\n    if (pendingSpace) output += ' ';\n    output += character;\n    pendingSpace = false;\n    if (output.length >= max) break;\n  }\n  return output.trim().slice(0, max);\n};\nconst valid = [];\nlet rejected = 0;\nfor (const candidate of (Array.isArray(parsed?.theses) ? parsed.theses : [])) {\n  const statement = normalizeText(candidate.statement, 5000);\n  const methodology = normalizeText(candidate.methodology, 1000);\n  const refs = (Array.isArray(candidate.evidence) ? candidate.evidence : []).filter((ref) => entityPack.evidence_items.some(e => e.evidence_id === ref.evidence_id));\n  const uniqueRefs = [...new Map(refs.map((ref) => [ref.evidence_id, ref])).values()].slice(0, 20);\n  const start = String(candidate.time_window_start ?? '').trim();\n  const end = String(candidate.time_window_end ?? '').trim();\n  const datesValid = (!start || !Number.isNaN(Date.parse(start))) && (!end || !Number.isNaN(Date.parse(end)))\n    && (!start || !end || Date.parse(end) >= Date.parse(start));\n  const confidence = Math.max(0, Math.min(1, Number(candidate.confidence ?? 0)));\n  if (!statement || statement.length < 50 || !methodology || uniqueRefs.length < 2 || !datesValid || confidence < 0.4) { rejected++; continue; }\n  valid.push({ p_thesis: { workspace_id: pack.workspace_id, workspace_domain_id: pack.workspace_domain_id,\n    subject_entity_id: pack.entity_id, thesis_type: 'stated', statement,\n    time_window_start: start, time_window_end: end, methodology,\n    confidence, evidence: uniqueRefs.map((ref) => ({ evidence_id: ref.evidence_id,\n      role: ['supporting','contradicting','context'].includes(ref.role) ? ref.role : 'supporting',\n      weight: Math.max(0, Math.min(1, Number(ref.weight ?? 0.7))) })),\n    engine_version: pack.config.engine_version, metadata: { generation_mode: 'stated_thesis_extraction',\n      entity_name: pack.entity_name, input_evidence_count: uniqueRefs.length } }\n  });\n}\nif (!valid.length) return [{ json: { no_thesis: true, thesis_type: 'stated', entity_id: pack.entity_id, entity_name: pack.entity_name, candidates_rejected: rejected } }];\nreturn valid.map((item) => ({ json: { ...item, no_thesis: false, candidates_rejected: rejected } }));"
+      }
+    },
+    {
+      "id": "9eb7701a-0000-4000-8000-9805af57d4b7",
+      "name": "Validate Revealed Thesis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        440
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pack = $('Build Revealed Thesis Request').item.json;\nconst response = $input.first().json ?? {};\nconst outputText = (response.output ?? []).flatMap((item) => item.content ?? []).find((item) => item.type === 'output_text')?.text;\nlet parsed = null;\ntry { if (outputText) parsed = JSON.parse(outputText); } catch {}\nconst entityPack = { entity_id: pack.entity_id, entity_name: pack.entity_name, evidence_items: pack.evidence_items };\nconst normalizeText = (value, max) => {\n  const raw = String(value ?? '');\n  let output = '';\n  let pendingSpace = false;\n  for (const character of raw) {\n    if (character.trim() === '') { pendingSpace = output.length > 0; continue; }\n    if (pendingSpace) output += ' ';\n    output += character;\n    pendingSpace = false;\n    if (output.length >= max) break;\n  }\n  return output.trim().slice(0, max);\n};\nconst valid = [];\nlet rejected = 0;\nfor (const candidate of (Array.isArray(parsed?.theses) ? parsed.theses : [])) {\n  const statement = normalizeText(candidate.statement, 5000);\n  const methodology = normalizeText(candidate.methodology, 1000);\n  const refs = (Array.isArray(candidate.evidence) ? candidate.evidence : []).filter((ref) => entityPack.evidence_items.some(e => e.evidence_id === ref.evidence_id));\n  const uniqueRefs = [...new Map(refs.map((ref) => [ref.evidence_id, ref])).values()].slice(0, 20);\n  const start = String(candidate.time_window_start ?? '').trim();\n  const end = String(candidate.time_window_end ?? '').trim();\n  const datesValid = (!start || !Number.isNaN(Date.parse(start))) && (!end || !Number.isNaN(Date.parse(end)))\n    && (!start || !end || Date.parse(end) >= Date.parse(start));\n  const confidence = Math.max(0, Math.min(1, Number(candidate.confidence ?? 0)));\n  if (!statement || statement.length < 50 || !methodology || uniqueRefs.length < 2 || !datesValid || confidence < 0.4) { rejected++; continue; }\n  valid.push({ p_thesis: { workspace_id: pack.workspace_id, workspace_domain_id: pack.workspace_domain_id,\n    subject_entity_id: pack.entity_id, thesis_type: 'revealed', statement,\n    time_window_start: start, time_window_end: end, methodology,\n    confidence, evidence: uniqueRefs.map((ref) => ({ evidence_id: ref.evidence_id,\n      role: ['supporting','contradicting','context'].includes(ref.role) ? ref.role : 'supporting',\n      weight: Math.max(0, Math.min(1, Number(ref.weight ?? 0.7))) })),\n    engine_version: pack.config.engine_version, metadata: { generation_mode: 'revealed_thesis_extraction',\n      entity_name: pack.entity_name, input_evidence_count: uniqueRefs.length } }\n  });\n}\nif (!valid.length) return [{ json: { no_thesis: true, thesis_type: 'revealed', entity_id: pack.entity_id, entity_name: pack.entity_name, candidates_rejected: rejected } }];\nreturn valid.map((item) => ({ json: { ...item, no_thesis: false, candidates_rejected: rejected } }));"
+      }
+    },
+    {
+      "id": "cd12cfcc-0000-4000-8000-a244cbdc2825",
+      "name": "Persist Stated Thesis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2160,
+        240
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Thesis Engine Configuration').item.json.supabase_url + '/rest/v1/rpc/n8n_upsert_verified_thesis' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_thesis: $json.p_thesis }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "3051ede5-0000-4000-8000-7413f7563e50",
+      "name": "Persist Revealed Thesis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2160,
+        440
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Thesis Engine Configuration').item.json.supabase_url + '/rest/v1/rpc/n8n_upsert_verified_thesis' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_thesis: $json.p_thesis }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "c91e8654-0000-4000-8000-1b31ad4ee9b6",
+      "name": "Stated Thesis Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        240
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const response = $input.first().json ?? {};\nconst result = Array.isArray(response) ? (response[0] ?? {}) : response;\nreturn [{ json: { completed: true, thesis_id: result.thesis_id ?? null, thesis_type: 'stated',\n  is_new: Boolean(result.is_new), evidence_count: Number(result.evidence_count ?? 0),\n  confidence: Number(result.confidence ?? 0) } }];"
+      }
+    },
+    {
+      "id": "456b3c7c-0000-4000-8000-f7f17d8966c3",
+      "name": "Revealed Thesis Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        440
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const response = $input.first().json ?? {};\nconst result = Array.isArray(response) ? (response[0] ?? {}) : response;\nreturn [{ json: { completed: true, thesis_id: result.thesis_id ?? null, thesis_type: 'revealed',\n  is_new: Boolean(result.is_new), evidence_count: Number(result.evidence_count ?? 0),\n  confidence: Number(result.confidence ?? 0) } }];"
+      }
+    },
+    {
+      "id": "4004382f-0000-4000-8000-9b8a7be8a379",
+      "name": "Skipped Stated Thesis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        600
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const row = $input.first().json;\nreturn [{ json: { completed: false, skipped: true, thesis_type: 'stated', entity_id: row.entity_id, entity_name: row.entity_name,\n  candidates_rejected: Number(row.candidates_rejected ?? 0) } }];"
+      }
+    },
+    {
+      "id": "ada57859-0000-4000-8000-2a6bbd37a360",
+      "name": "Skipped Revealed Thesis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        600
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const row = $input.first().json;\nreturn [{ json: { completed: false, skipped: true, thesis_type: 'revealed', entity_id: row.entity_id, entity_name: row.entity_name,\n  candidates_rejected: Number(row.candidates_rejected ?? 0) } }];"
+      }
+    },
+    {
+      "id": "b6539acd-0000-4000-8000-bb012f9671bc",
+      "name": "Entity Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        340
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map((item) => item.json ?? {});\nconst completed = rows.filter(r => r.completed);\nconst stated = completed.filter(r => r.thesis_type === 'stated');\nconst revealed = completed.filter(r => r.thesis_type === 'revealed');\nreturn [{ json: { entity_completed: true, entity_id: rows[0]?.entity_id, entity_name: rows[0]?.entity_name,\n  theses_persisted: completed.length, stated_theses: stated.length, revealed_theses: revealed.length,\n  stated_new: stated.filter(r => r.is_new).length, revealed_new: revealed.filter(r => r.is_new).length,\n  candidates_rejected: rows.reduce((sum, r) => sum + Number(r.candidates_rejected ?? 0), 0) } }];"
+      }
+    },
+    {
+      "id": "38e5f825-0000-4000-8000-c9aafa26d712",
+      "name": "No Evidence Entity Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        600
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: { entity_completed: true, no_evidence: true, entity_id: $json.entity_id, entity_name: $json.entity_name,\n  theses_persisted: 0, stated_theses: 0, revealed_theses: 0 } }];"
+      }
+    },
+    {
+      "id": "c88a479f-0000-4000-8000-82c0ece899f6",
+      "name": "Thesis Engine Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        120
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map((item) => item.json ?? {});\nreturn [{ json: { status: 'completed',\n  entities_processed: rows.filter(r => !r.no_evidence).length,\n  no_evidence_entities: rows.filter(r => r.no_evidence).length,\n  theses_persisted: rows.reduce((sum, r) => sum + Number(r.theses_persisted ?? 0), 0),\n  stated_theses: rows.reduce((sum, r) => sum + Number(r.stated_theses ?? 0), 0),\n  revealed_theses: rows.reduce((sum, r) => sum + Number(r.revealed_theses ?? 0), 0),\n  new_theses: rows.reduce((sum, r) => sum + Number(r.stated_new ?? 0) + Number(r.revealed_new ?? 0), 0),\n  candidates_rejected: rows.reduce((sum, r) => sum + Number(r.candidates_rejected ?? 0), 0),\n  output_status: 'draft', note: 'Thesis extraction complete. Stated theses from public statements; revealed theses from investment patterns. Both are draft until human review.' } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Thesis Engine Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Thesis Extraction": {
+      "main": [
+        [
+          {
+            "node": "Thesis Engine Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Thesis Engine Configuration": {
+      "main": [
+        [
+          {
+            "node": "Load Thesis Evidence Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Thesis Evidence Candidates": {
+      "main": [
+        [
+          {
+            "node": "Group Evidence by Entity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Group Evidence by Entity": {
+      "main": [
+        [
+          {
+            "node": "Entity Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entity Loop": {
+      "main": [
+        [
+          {
+            "node": "Thesis Engine Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Evidence for Entity?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Evidence for Entity?": {
+      "main": [
+        [
+          {
+            "node": "Build Stated Thesis Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Revealed Thesis Request",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "No Evidence Entity Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Stated Thesis Request": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Stated Thesis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Revealed Thesis Request": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Revealed Thesis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Stated Thesis": {
+      "main": [
+        [
+          {
+            "node": "Validate Stated Thesis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Revealed Thesis": {
+      "main": [
+        [
+          {
+            "node": "Validate Revealed Thesis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Stated Thesis": {
+      "main": [
+        [
+          {
+            "node": "Persist Stated Thesis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skipped Stated Thesis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Revealed Thesis": {
+      "main": [
+        [
+          {
+            "node": "Persist Revealed Thesis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skipped Revealed Thesis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Stated Thesis": {
+      "main": [
+        [
+          {
+            "node": "Stated Thesis Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Revealed Thesis": {
+      "main": [
+        [
+          {
+            "node": "Revealed Thesis Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stated Thesis Complete": {
+      "main": [
+        [
+          {
+            "node": "Entity Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Revealed Thesis Complete": {
+      "main": [
+        [
+          {
+            "node": "Entity Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skipped Stated Thesis": {
+      "main": [
+        [
+          {
+            "node": "Entity Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skipped Revealed Thesis": {
+      "main": [
+        [
+          {
+            "node": "Entity Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entity Complete": {
+      "main": [
+        [
+          {
+            "node": "Entity Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Evidence Entity Complete": {
+      "main": [
+        [
+          {
+            "node": "Entity Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "tags": [],
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionTimeout": 1800
+  }
+}

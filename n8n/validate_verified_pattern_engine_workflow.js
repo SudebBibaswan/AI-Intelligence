@@ -21,11 +21,16 @@ const load = nodes.get('Load Accepted Observations');
 if (!String(load.parameters.url).includes('/rpc/n8n_list_pattern_observation_candidates')) {
   throw new Error('ACCEPTED_OBSERVATION_RPC_NOT_USED');
 }
+if (load.alwaysOutputData !== true) throw new Error('EMPTY_ACCEPTED_OBSERVATIONS_NOT_PRESERVED');
 if (load.credentials?.supabaseApi?.name !== 'Supabase account') throw new Error('CENTRAL_SUPABASE_CREDENTIAL_NOT_REUSED');
 const openai = nodes.get('OpenAI Pattern Synthesis');
 if (openai.credentials?.openAiApi?.name !== 'OpenAI account') throw new Error('CENTRAL_OPENAI_CREDENTIAL_NOT_REUSED');
+if (openai.parameters?.jsonBody !== '={{ JSON.stringify($json.openai_request) }}') {
+  throw new Error('OPENAI_PATTERN_REQUEST_BODY_NOT_FORWARDED');
+}
 const request = nodes.get('Build Pattern Request').parameters.jsCode;
-for (const fragment of ['additionalProperties: false', "name: 'accepted_observation_patterns'",
+for (const fragment of ['additionalProperties: false', "type: 'json_schema'", 'strict: true',
+  'text: { format:', "name: 'accepted_observation_patterns'",
   'at least three supplied observation_id values', 'at least three independent source families',
   'at least two distinct events or entities', 'Do not create patterns directly from signals',
   'Do not claim a trend, causal relationship, prediction, hypothesis, recommendation, or final insight']) {

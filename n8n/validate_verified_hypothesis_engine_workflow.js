@@ -21,18 +21,25 @@ const load = nodes.get('Load Eligible Patterns');
 if (!String(load.parameters.url).includes('/rpc/n8n_list_hypothesis_pattern_candidates')) {
   throw new Error('ELIGIBLE_PATTERN_RPC_NOT_USED');
 }
+if (load.alwaysOutputData !== true) throw new Error('EMPTY_ELIGIBLE_PATTERNS_NOT_PRESERVED');
 if (load.credentials?.supabaseApi?.name !== 'Supabase account') throw new Error('CENTRAL_SUPABASE_CREDENTIAL_NOT_REUSED');
 const openai = nodes.get('OpenAI Hypothesis Synthesis');
 if (openai.credentials?.openAiApi?.name !== 'OpenAI account') throw new Error('CENTRAL_OPENAI_CREDENTIAL_NOT_REUSED');
+if (openai.parameters?.jsonBody !== '={{ JSON.stringify($json.openai_request) }}') {
+  throw new Error('OPENAI_HYPOTHESIS_REQUEST_BODY_NOT_FORWARDED');
+}
 const request = nodes.get('Build Hypothesis Request').parameters.jsCode;
-for (const fragment of ['additionalProperties: false', "name: 'pattern_hypotheses'",
+for (const fragment of ['additionalProperties: false', "type: 'json_schema'", 'strict: true',
+  'text: { format:', "name: 'pattern_hypotheses'",
+  "'problem','proposed_value','assumptions'",
   'target user', 'concrete problem', 'explicit assumptions, falsifiers, and validation questions',
   'Funding alone is not proof of demand', 'Do not declare facts, make predictions, or claim causation']) {
   if (!request.includes(fragment)) throw new Error(`MISSING_HYPOTHESIS_PROMPT_GUARD:${fragment}`);
 }
 const validation = nodes.get('Validate Hypothesis Candidates').parameters.jsCode;
 for (const fragment of ['patternById.has', 'uniqueRefs.length < 1', 'assumptions.length < 1', 'falsifiers.length < 1',
-  'validationQuestions.length < 1', 'fundingOnlyClaim', "if (character.trim() === '')", 'no_hypothesis: true']) {
+  'validationQuestions.length < 1', '!proposedValue || proposedValue.length < 10', 'fundingOnlyClaim',
+  "if (character.trim() === '')", 'no_hypothesis: true']) {
   if (!validation.includes(fragment)) throw new Error(`MISSING_HYPOTHESIS_VALIDATION_GATE:${fragment}`);
 }
 if (validation.includes("replace(/s+/g, ' ')")) throw new Error('LETTER_S_CORRUPTION_REGRESSION');

@@ -7,6 +7,12 @@ begin;
 -- validation_questions, cited pattern IDs, semantic deduplication.
 -- No human gate. Status auto-advances to ready_for_validation.
 
+alter table public.hypotheses
+  add column if not exists falsifiers jsonb not null default '[]'::jsonb
+    check (jsonb_typeof(falsifiers) = 'array'),
+  add column if not exists validation_questions jsonb not null default '[]'::jsonb
+    check (jsonb_typeof(validation_questions) = 'array');
+
 create or replace function public.n8n_list_hypothesis_pattern_candidates(
   p_workspace_id uuid,
   p_domain_limit integer default 3,
@@ -155,7 +161,8 @@ begin
   if length(v_title) not between 1 and 240
     or length(v_statement) not between 1 and 2000
     or length(v_target_user) < 1
-    or length(v_problem) < 1 then
+    or length(v_problem) < 1
+    or length(v_proposed_value) < 1 then
     raise exception using errcode = '22023', message = 'INVALID_HYPOTHESIS_PAYLOAD';
   end if;
 

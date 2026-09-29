@@ -1,0 +1,764 @@
+{
+  "name": "RE 11 - Adversarial Validation Engine",
+  "nodes": [
+    {
+      "id": "cfd355ae-0000-4000-8000-97fadf2ac8d2",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        240
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "f5ced340-0000-4000-8000-3df8b17ab3e8",
+      "name": "Daily Validation Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c1e46825-0000-4000-8000-9093d1838da2",
+      "name": "Validation Engine Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: {\n  supabase_url: 'https://jaeltkzfjgrzgxgzxlfs.supabase.co',\n  workspace_id: 'a51b8277-4cd5-4f8a-9ffd-4ddbe56683da',\n  domain_limit: 3,\n  hypotheses_per_domain: 10,\n  max_validations_per_domain: 5,\n  model: 'gpt-6-luna',\n  engine_version: 'validation-engine-v1.0.0',\n  research_budget_usd: 0.15\n} }];"
+      }
+    },
+    {
+      "id": "34a922f4-0000-4000-8000-9e3be5b3adae",
+      "name": "Load Hypotheses Ready for Validation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        320
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.supabase_url + '/rest/v1/rpc/n8n_list_validation_hypothesis_candidates' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_workspace_id: $json.workspace_id, p_domain_limit: $json.domain_limit, p_hypotheses_per_domain: $json.hypotheses_per_domain }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "a9c6f39e-0000-4000-8000-e87eb5548b93",
+      "name": "Build Validation Packs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const config = $('Validation Engine Configuration').first().json;\nconst rows = $input.all().flatMap((item) => Array.isArray(item.json) ? item.json : [item.json])\n  .filter((row) => row && row.hypothesis_id && row.workspace_domain_id);\nif (!rows.length) return [{ json: { config, no_hypotheses: true, hypothesis_items: [] } }];\nconst groups = new Map();\nfor (const row of rows) {\n  const key = row.workspace_domain_id;\n  if (!groups.has(key)) groups.set(key, { config, no_hypotheses: false, workspace_id: row.workspace_id,\n    workspace_domain_id: key, domain_key: row.domain_key, domain_name: row.domain_name, hypothesis_items: [] });\n  groups.get(key).hypothesis_items.push({ hypothesis_id: row.hypothesis_id, title: row.title,\n    statement: row.statement, target_user: row.target_user, problem: row.problem,\n    proposed_value: row.proposed_value, assumptions: row.assumptions, falsifiers: row.falsifiers,\n    validation_questions: row.validation_questions, confidence: row.confidence,\n    pattern_ids: row.pattern_ids, pattern_titles: row.pattern_titles, pattern_types: row.pattern_types,\n    engine_version: row.engine_version });\n}\nreturn [...groups.values()].map((pack) => ({ json: { ...pack, hypothesis_count: pack.hypothesis_items.length } }));"
+      }
+    },
+    {
+      "id": "8e579b15-0000-4000-8000-49a6be034686",
+      "name": "Validation Domain Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        960,
+        320
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "e32e2625-0000-4000-8000-7f817a6c8740",
+      "name": "Has Hypotheses to Validate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        440
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8c2ff97f-0000-4000-8000-7b2ba1618b52",
+              "leftValue": "={{ $json.no_hypotheses !== true && $json.hypothesis_items.length >= 1 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "42e7d174-0000-4000-8000-f102c8f844e3",
+      "name": "Build Validation Research Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        340
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pack = $input.first().json;\nconst hypothesis = pack.hypothesis_items[0];\nconst dimensions = ['competitor', 'demand', 'adoption', 'funding', 'technical', 'regulatory', 'incumbent', 'failed_attempt', 'counter_signal'];\nconst researchPlan = dimensions.map((dimension) => {\n  let query = '';\n  switch (dimension) {\n    case 'competitor':\n      query = 'competitors ' + hypothesis.target_user + ' ' + hypothesis.problem + ' existing solutions market';\n      break;\n    case 'demand':\n      query = 'market demand ' + hypothesis.target_user + ' ' + hypothesis.problem + ' willingness to pay';\n      break;\n    case 'adoption':\n      query = 'adoption rate ' + hypothesis.target_user + ' ' + hypothesis.problem + ' technology adoption curve';\n      break;\n    case 'funding':\n      query = 'funding rounds ' + hypothesis.target_user + ' ' + hypothesis.problem + ' VC investment';\n      break;\n    case 'technical':\n      query = 'technical feasibility ' + hypothesis.problem + ' ' + (hypothesis.proposed_value ?? '') + ' challenges';\n      break;\n    case 'regulatory':\n      query = 'regulatory barriers ' + hypothesis.target_user + ' ' + hypothesis.problem + ' compliance';\n      break;\n    case 'incumbent':\n      query = 'incumbent response ' + hypothesis.target_user + ' ' + hypothesis.problem + ' market defense';\n      break;\n    case 'failed_attempt':\n      query = 'failed startups ' + hypothesis.target_user + ' ' + hypothesis.problem + ' shutdown postmortem';\n      break;\n    case 'counter_signal':\n      query = 'counter evidence ' + hypothesis.problem + ' ' + ((hypothesis.falsifiers ?? []).join(' ') ?? '') + ' not a problem';\n      break;\n  }\n  return { dimension, query, hypothesis_id: hypothesis.hypothesis_id };\n});\nconst validationRunId = 'RUN_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);\nreturn [{ json: { ...pack, research_plan: researchPlan, validation_run_id: validationRunId } }];"
+      }
+    },
+    {
+      "id": "9f33cb9f-0000-4000-8000-0cb30416dad4",
+      "name": "Research Dimension Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1680,
+        340
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "b38daf3c-0000-4000-8000-7d5725a022ba",
+      "name": "Build Research Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        340
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pack = $('Build Validation Research Plan').item.json;\nconst dimensionItem = $input.first().json;\nconst config = pack.config;\nconst schema = {\n  type: 'object', additionalProperties: false, properties: {\n    evidence: { type: 'array', minItems: 1, maxItems: 5, items: {\n      type: 'object', additionalProperties: false, properties: {\n        claim_text: { type: 'string' }, excerpt: { type: 'string' }, polarity: { type: 'string', enum: ['positive', 'negative', 'neutral'] },\n        confidence: { type: 'number' }, source_url: { type: 'string' }, source_title: { type: 'string' }\n      }, required: ['claim_text', 'excerpt', 'polarity', 'confidence', 'source_url', 'source_title']\n    }}\n  }, required: ['evidence']\n};\nreturn [{ json: { ...pack, ...dimensionItem, openai_request: { model: config.model, store: false, max_output_tokens: 2000,\n  instructions: 'Research the specific validation dimension for the hypothesis. Find concrete evidence (not opinions). Return exact excerpts with source URLs. Evidence must be verifiable. Stance will be determined by the validation engine.',\n  input: [{ role: 'user', content: [{ type: 'input_text', text: JSON.stringify({\n    hypothesis: { title: pack.hypothesis_items[0].title, statement: pack.hypothesis_items[0].statement,\n      target_user: pack.hypothesis_items[0].target_user, problem: pack.hypothesis_items[0].problem,\n      proposed_value: pack.hypothesis_items[0].proposed_value, assumptions: pack.hypothesis_items[0].assumptions,\n      falsifiers: pack.hypothesis_items[0].falsifiers, validation_questions: pack.hypothesis_items[0].validation_questions },\n    dimension: dimensionItem.dimension, query: dimensionItem.query\n  }) }] }],\n  text: { format: { type: 'json_schema', name: 'validation_evidence', strict: true, schema } }\n} } }];"
+      }
+    },
+    {
+      "id": "8d2e7f7d-0000-4000-8000-34e611662696",
+      "name": "OpenAI Validation Research",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2160,
+        340
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.openai_request) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "7a0hdZ68ejgk6EnD",
+          "name": "OpenAI account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "6de9d7d1-0000-4000-8000-dc0852256930",
+      "name": "Process Validation Evidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        340
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pack = $('Build Validation Research Plan').item.json;\nconst dimensionItem = $('Research Dimension Loop').item.json;\nconst response = $input.first().json ?? {};\nconst outputText = (response.output ?? []).flatMap((item) => item.content ?? []).find((item) => item.type === 'output_text')?.text;\nlet parsed = null;\ntry { if (outputText) parsed = JSON.parse(outputText); } catch {}\nconst evidenceItems = Array.isArray(parsed?.evidence) ? parsed.evidence : [];\nconst hypothesis = pack.hypothesis_items[0];\nconst validEvidence = [];\nfor (const item of evidenceItems) {\n  const claimText = String(item.claim_text ?? '').trim().slice(0, 2000);\n  const excerpt = String(item.excerpt ?? '').trim().slice(0, 3000);\n  const polarity = ['positive', 'negative', 'neutral'].includes(item.polarity) ? item.polarity : 'neutral';\n  const confidence = Math.max(0, Math.min(1, Number(item.confidence ?? 0)));\n  const sourceUrl = String(item.source_url ?? '').trim();\n  const sourceTitle = String(item.source_title ?? '').trim().slice(0, 500);\n  if (!claimText || !excerpt || !sourceUrl || confidence < 0.4) continue;\n  let stance = 'neutral';\n  const lowerText = (claimText + ' ' + excerpt).toLowerCase();\n  const falsifierWords = (Array.isArray(hypothesis.falsifiers) ? hypothesis.falsifiers : []).flatMap(f => String(f).toLowerCase().split(' ').filter(w => w.length > 3));\n  const supportingSignals = ['growth', 'increasing', 'demand', 'adoption', 'funding raised', 'investment', 'success', 'traction', 'product-market fit'];\n  const contradictingSignals = ['decline', 'failed', 'shutdown', 'no demand', 'no market', 'regulatory block', 'technical barrier', 'incumbent', 'saturated'];\n  const hasSupporting = supportingSignals.some(s => lowerText.includes(s));\n  const hasContradicting = contradictingSignals.some(s => lowerText.includes(s)) || falsifierWords.some(f => lowerText.includes(f));\n  if (hasSupporting && !hasContradicting) stance = 'supporting';\n  else if (hasContradicting && !hasSupporting) stance = 'contradicting';\n  else stance = 'neutral';\n  validEvidence.push({ evidence_text: claimText, excerpt, stance, confidence, source_url: sourceUrl, source_title: sourceTitle });\n}\nreturn [{ json: { ...pack, ...dimensionItem, valid_evidence: validEvidence, evidence_count: validEvidence.length, openai_calls: 1 } }];"
+      }
+    },
+    {
+      "id": "864450cc-0000-4000-8000-bb459404ce9a",
+      "name": "Upsert Validation Evidence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        340
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Validation Engine Configuration').item.json.supabase_url + '/rest/v1/rpc/n8n_upsert_validation_evidence' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_evidence: { workspace_id: $json.workspace_id, validation_run_id: $json.validation_run_id, evidence_id: $json.valid_evidence[0].evidence_id ?? (\"EVID_\" + Date.now() + \"_\" + Math.random().toString(36).slice(2, 10)), dimension: $json.dimension, stance: $json.valid_evidence[0].stance, weight: $json.valid_evidence[0].confidence, reasoning_summary: $json.valid_evidence[0].evidence_text } }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "352c423d-0000-4000-8000-416cdd299e27",
+      "name": "Evidence Loop",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2880,
+        340
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "a12acb30-0000-4000-8000-3cacb4dbd920",
+      "name": "Has Valid Evidence?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3120,
+        460
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "93bf43fa-0000-4000-8000-6f2ca3402008",
+              "leftValue": "={{ $json.valid_evidence.length > 0 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c46de21e-0000-4000-8000-fb394a224de6",
+      "name": "Next Evidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        340
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pack = $('Process Validation Evidence').item.json;\nconst dimensionItem = $('Research Dimension Loop').item.json;\nconst evidence = $input.first().json.valid_evidence;\nreturn [{ json: { ...pack, ...dimensionItem, valid_evidence: evidence.slice(1), evidence_count: evidence.length - 1, openai_calls: 0 } }];"
+      }
+    },
+    {
+      "id": "765e8d1a-0000-4000-8000-5c2472a94526",
+      "name": "Dimension Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        180
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pack = $('Process Validation Evidence').item.json;\nconst dimensionItem = $('Research Dimension Loop').item.json;\nreturn [{ json: { ...pack, ...dimensionItem, dimension_completed: true, openai_calls: $json.openai_calls ?? 1 } }];"
+      }
+    },
+    {
+      "id": "0ec9a25d-0000-4000-8000-c85da5c61979",
+      "name": "All Dimensions Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        180
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map((item) => item.json ?? {});\nreturn [{ json: { ...rows[0], all_dimensions_completed: true, total_evidence: rows.reduce((sum, r) => sum + (r.evidence_count ?? 0), 0), openai_calls: rows.reduce((sum, r) => sum + (r.openai_calls ?? 0), 0) } }];"
+      }
+    },
+    {
+      "id": "ab15c4a4-0000-4000-8000-c9b64035150e",
+      "name": "Finalize Validation Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2400,
+        600
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Validation Engine Configuration').item.json.supabase_url + '/rest/v1/rpc/n8n_upsert_validation_run' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_validation_run: { workspace_id: $json.workspace_id, hypothesis_id: $json.hypothesis_id, research_run_id: $json.research_run_id ?? null, dimensions: $json.research_plan.map(r => r.dimension), methodology: { research_mode: \"adversarial\", dimensions_researched: $json.research_plan.length, evidence_per_dimension: Math.round($json.total_evidence / $json.research_plan.length) }, engine_version: $json.config.engine_version, idempotency_key: $json.validation_run_id } }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "ZGfkeG6OrWvWsZXU",
+          "name": "Supabase account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "4331aede-0000-4000-8000-f0ec602e5b53",
+      "name": "Validation Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        600
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const result = $input.first().json ?? {};\nreturn [{ json: { completed: true, validation_run_id: result.validation_run_id ?? null, result: result.result ?? 'inconclusive', confidence: result.confidence ?? 0, evidence_supported: result.evidence_supported ?? 0, evidence_contradicting: result.evidence_contradicting ?? 0, evidence_neutral: result.evidence_neutral ?? 0 } }];"
+      }
+    },
+    {
+      "id": "f3b14f45-0000-4000-8000-03055c9737ad",
+      "name": "No Hypotheses Domain Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        600
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: { domain_completed: true, no_hypotheses: true, validations_completed: 0 } }];"
+      }
+    },
+    {
+      "id": "59bb80aa-0000-4000-8000-0cfb8f13a07b",
+      "name": "Validation Engine Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        120
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map((item) => item.json ?? {});\nconst errors = [...new Set(rows.flatMap((row) => row.provider_errors ?? []).filter(Boolean))];\nconst allResults = rows.flatMap(r => r.results ?? []);\nreturn [{ json: { status: errors.length && allResults.length === 0 ? 'failed' : (errors.length ? 'partial' : 'completed'),\n  domains_processed: rows.filter((row) => !row.no_hypotheses).length,\n  no_hypotheses: rows.some((row) => row.no_hypotheses),\n  validations_completed: allResults.length,\n  supported: allResults.filter(r => r.result === 'supported').length,\n  mixed: allResults.filter(r => r.result === 'mixed').length,\n  weakened: allResults.filter(r => r.result === 'weakened').length,\n  inconclusive: allResults.filter(r => r.result === 'inconclusive').length,\n  provider_errors: errors,\n  output_status: 'validated', note: 'Adversarial validation complete. Hypothesis status updated to supported/mixed/weakened/inconclusive. Partial failures never produce false support.' } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validation Engine Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Validation Check": {
+      "main": [
+        [
+          {
+            "node": "Validation Engine Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validation Engine Configuration": {
+      "main": [
+        [
+          {
+            "node": "Load Hypotheses Ready for Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Hypotheses Ready for Validation": {
+      "main": [
+        [
+          {
+            "node": "Build Validation Packs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Validation Packs": {
+      "main": [
+        [
+          {
+            "node": "Validation Domain Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validation Domain Loop": {
+      "main": [
+        [
+          {
+            "node": "Validation Engine Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Hypotheses to Validate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Hypotheses to Validate?": {
+      "main": [
+        [
+          {
+            "node": "Build Validation Research Plan",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Hypotheses Domain Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Validation Research Plan": {
+      "main": [
+        [
+          {
+            "node": "Research Dimension Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Research Dimension Loop": {
+      "main": [
+        [
+          {
+            "node": "All Dimensions Complete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Research Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Research Request": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Validation Research",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Validation Research": {
+      "main": [
+        [
+          {
+            "node": "Process Validation Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Validation Evidence": {
+      "main": [
+        [
+          {
+            "node": "Evidence Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evidence Loop": {
+      "main": [
+        [
+          {
+            "node": "Dimension Complete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Valid Evidence?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Valid Evidence?": {
+      "main": [
+        [
+          {
+            "node": "Upsert Validation Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Next Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Validation Evidence": {
+      "main": [
+        [
+          {
+            "node": "Next Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Next Evidence": {
+      "main": [
+        [
+          {
+            "node": "Evidence Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dimension Complete": {
+      "main": [
+        [
+          {
+            "node": "Research Dimension Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "All Dimensions Complete": {
+      "main": [
+        [
+          {
+            "node": "Finalize Validation Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Validation Run": {
+      "main": [
+        [
+          {
+            "node": "Validation Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validation Complete": {
+      "main": [
+        [
+          {
+            "node": "Validation Domain Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validation Domain Complete": {
+      "main": [
+        [
+          {
+            "node": "Validation Domain Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Hypotheses Domain Complete": {
+      "main": [
+        [
+          {
+            "node": "Validation Domain Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "tags": [],
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionTimeout": 3600
+  }
+}
