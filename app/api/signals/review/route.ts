@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { signal_id, decision, request_id } = body
+    const { signal_id, decision, request_id, reason } = body
 
     if (!signal_id || !decision || !request_id) {
       return NextResponse.json({ error: 'signal_id, decision, request_id required' }, { status: 400 })
@@ -21,104 +21,50 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'decision must be accepted or rejected' }, { status: 400 })
     }
 
-    // Get signal
-    const { data: signal, error: signalError } = await supabase
-      .from('signals')
-      .select('*')
-      .eq('id', signal_id)
-      .single()
-
-    if (signalError || !signal) {
-      return NextResponse.json({ error: 'Signal not found' }, { status: 404 })
+    if (decision === 'rejected' && (!reason || !reason.trim())) {
+      return NextResponse.json({ error: 'reason required for rejection' }, { status: 400 })
     }
 
-    // Check workspace membership
-    const { data: membership } = await supabase
-      .from('workspace_members')
-      .select('role')
-      .eq('workspace_id', signal.workspace_id)
-      .eq('user_id', user.id)
-      .single()
+    // Use the database function for proper validation and audit logging
+    const { data, error } = await supabase.rpc('review_intelligence_signal', {
+      p_signal_id: signal_id,
+      p_decision: decision,
+      p_reason: reason?.trim() || null,
+      p_request_id: request_id
+    })
 
-    if (!membership || !['owner', 'admin', 'member'].includes(membership.role)) {
-      return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
+    if (error) {
+      // Handle specific error codes
+      if (error.message?.includes('SIGNAL_REQUIRES_LINKED_EVIDENCE')) {
+        return NextResponse.json({ error: 'Cannot accept signal without linked evidence' }, { status: 400 })
+      }
+      if (error.message?.includes('SIGNAL_REQUIRES_CURRENT_VERIFIED_EVIDENCE')) {
+        return NextResponse.json({ error: 'Signal requires current verified evidence from accepted sources' }, { status: 400 })
+      }
+      if (error.message?.includes('SUPERSEDED_SIGNAL_CANNOT_BE_REVIEWED')) {
+        return NextResponse.json({ error: 'Superseded signals cannot be reviewed' }, { status: 400 })
+      }
+      if (error.message?.includes('SIGNAL_NOT_FOUND')) {
+        return NextResponse.json({ error: 'Signal not found' }, { status: 404 })
+      }
+      if (error.message?.includes('AUTHENTICATED_REVIEWER_REQUIRED') || error.message?.includes('SIGNAL_REVIEW_NOT_AUTHORIZED')) {
+        return NextResponse.json({ error: 'Not authorized to review this signal' }, { status: 403 })
+      }
+      if (error.message?.includes('REVIEW_REQUEST_ID_CONFLICT')) {
+        return NextResponse.json({ error: 'Request ID conflict with existing review' }, { status: 409 })
+      }
+      throw error
     }
-
-    // Check if already reviewed
-    const { data: existingReview } = await supabase
-      .from('signal_reviews')
-      .select('id')
-      .eq('request_id', request_id)
-      .single()
-
-    if (existingReview) {
-      return NextResponse.json({ 
-        review_id: existingReview.id, 
-        signal_id, 
-        status: signal.status, 
-        replayed: true 
-      })
-    }
-
-    // Update signal status
-    const newStatus = decision === 'accepted' ? 'accepted' : 'rejected'
-    
-    const { error: updateError } = await supabase
-      .from('signals')
-      .update({ 
-        status: newStatus,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', signal_id)
-
-    if (updateError) throw updateError
-
-    // Create review record
-    const { data: review, error: reviewError } = await supabase
-      .from('signal_reviews')
-      .insert({
-        workspace_id: signal.workspace_id,
-        signal_id,
-        reviewer_id: user.id,
-        decision: newStatus,
-        previous_status: signal.status,
-        reason: null,
-        request_id
-      })
-      .select()
-      .single()
-
-    if (reviewError) throw reviewError
-
-    // If accepted, auto-trigger observation engine check (optional)
-    if (decision === 'accepted') {
-      // Could trigger observation engine via n8n webhook here
-      // For now, just log
-      console.log(`Signal ${signal_id} accepted, observation engine will pick up on next cron`)
-    }
-
-    // Audit log
-    await supabase
-      .from('audit_log')
-      .insert({
-        workspace_id: signal.workspace_id,
-        actor_type: 'user',
-        actor_id: user.id,
-        action: 'signal.reviewed',
-        target_type: 'signal',
-        target_id: signal_id,
-        request_id,
-        metadata: {
-          previous_status: signal.status,
-          decision: newStatus
-        }
-      })
 
     return NextResponse.json({
-      review_id: review.id,
-      signal_id,
-      status: newStatus,
-      replayed: false
+      review_id: data.review_id,
+      signal_id: data.signal_id,
+      previous_status: data.previous_status,
+      decision: data.decision,
+      evidence_count: data.evidence_count,
+      source_count: data.source_count,
+      corroboration_status: data.corroboration_status,
+      replayed: data.replayed
     })
   } catch (error) {
     console.error('Signal review error:', error)
