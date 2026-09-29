@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 const migration = fs.readFileSync(path.join(__dirname, 'migrations', '202609270010_research_quality_observability.sql'), 'utf8');
+const snapshotsMigration = fs.readFileSync(path.join(__dirname, 'migrations', '202609290001_research_quality_snapshots.sql'), 'utf8');
 const failures = [];
 const requiredViews = [
   'v_research_quality_runs',
@@ -19,6 +20,13 @@ if (!migration.includes('source_to_evidence_yield')) failures.push('Evidence yie
 if (!migration.includes('discovery_provider_error_count')) failures.push('Provider error metric missing');
 if (!migration.includes('entity_provenance_coverage') || !migration.includes('relationship_provenance_coverage')) failures.push('Capital provenance metrics missing');
 if (!/^begin;[\s\S]*commit;\s*$/.test(migration)) failures.push('Migration must be transactional');
+
+for (const policy of ['research_quality_snapshots_select_member', 'research_quality_snapshots_insert_service']) {
+  const drop = snapshotsMigration.indexOf(`drop policy if exists ${policy}`);
+  const create = snapshotsMigration.indexOf(`create policy ${policy}`);
+  if (drop < 0 || create < 0 || drop > create) failures.push(`Snapshot policy ${policy} is not replay-safe`);
+}
+if (!/^begin;[\s\S]*commit;\s*$/.test(snapshotsMigration)) failures.push('Snapshots migration must be transactional');
 
 if (failures.length) {
   console.error('RESEARCH QUALITY OBSERVABILITY VALIDATION FAILED');
