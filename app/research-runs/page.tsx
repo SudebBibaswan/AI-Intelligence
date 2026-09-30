@@ -5,6 +5,7 @@ import { Play, RefreshCw, CheckCircle2, AlertCircle, Clock, Zap, Brain, Activity
 import { useWorkspace } from "@/lib/hooks/workspace";
 import { useResearchRuns } from "@/lib/hooks/intelligence";
 import { ResearchQualityRun } from "@/types/intelligence";
+import { AppShell } from "@/components/layout/app-shell";
 
 const statusConfig: Record<string, { icon: typeof CheckCircle2; color: string; bg: string; label: string }> = {
   completed: { icon: CheckCircle2, color: 'text-[#8fd19e]', bg: 'bg-[#183828] border-[#4b7a5e]', label: 'Completed' },
@@ -27,6 +28,10 @@ const triggerTypeLabels: Record<string, string> = {
 };
 
 export default function ResearchRunsPage() {
+  return <AppShell><ResearchRunsContent /></AppShell>;
+}
+
+function ResearchRunsContent() {
   const { workspace, workspaceDomain, isLoading: workspaceLoading } = useWorkspace();
   const workspaceId = workspace?.id;
   const workspaceDomainId = workspaceDomain?.id;

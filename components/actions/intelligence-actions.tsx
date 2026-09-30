@@ -128,7 +128,7 @@ export function IntelligenceActions({ title, path }: { title: string; path: stri
 
   return (
     <div className="flex flex-wrap gap-2">
-      <div className="flex items-center gap-2">
+      <div className="relative flex items-center gap-2">
         <button 
           type="button" 
           onClick={() => setShowEngines(!showEngines)} 
@@ -139,7 +139,7 @@ export function IntelligenceActions({ title, path }: { title: string; path: stri
         </button>
         
         {showEngines && (
-          <div className="fixed bottom-full left-0 right-0 mb-2 p-3 surface border border-[#30345f] rounded-t-lg shadow-lg z-10 max-h-[60vh] overflow-y-auto">
+          <div className="absolute left-0 top-full z-20 mt-2 w-80 max-h-[60vh] overflow-y-auto rounded-lg border border-[#30345f] p-3 shadow-lg surface">
             <div className="flex items-center justify-between mb-3">
               <p className="text-xs font-semibold text-[#a5abc9]">INTELLIGENCE ENGINES</p>
               <button onClick={() => setShowEngines(false)} className="text-xs text-[#a5abc9] hover:text-white">Close</button>

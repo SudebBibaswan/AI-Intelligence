@@ -209,3 +209,17 @@ export async function fetchInvestments(params: {
     offset: String(params.offset || 0)
   })
 }
+
+export async function fetchNews(params: {
+  workspace_id: string
+  domain_id?: string
+  limit?: number
+  offset?: number
+}): Promise<{ data: any[]; count: number }> {
+  return fetchApi<{ data: any[]; count: number }>('/news', {
+    workspace_id: params.workspace_id,
+    domain_id: params.domain_id || '',
+    limit: String(params.limit || 50),
+    offset: String(params.offset || 0),
+  })
+}

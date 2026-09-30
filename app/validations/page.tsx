@@ -3,8 +3,13 @@
 import { useEffect, useState } from "react";
 import { fetchValidations } from "@/lib/api/intelligence";
 import { ValidationRun } from "@/types/intelligence";
+import { AppShell } from "@/components/layout/app-shell";
 
 export default function ValidationsPage() {
+  return <AppShell><ValidationsContent /></AppShell>;
+}
+
+function ValidationsContent() {
   const [validations, setValidations] = useState<ValidationRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

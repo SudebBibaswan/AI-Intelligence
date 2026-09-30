@@ -2,8 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { fetchQualitySnapshots } from "@/lib/api/intelligence";
+import { AppShell } from "@/components/layout/app-shell";
 
 export default function QualityPage() {
+  return <AppShell><QualityContent /></AppShell>;
+}
+
+function QualityContent() {
   const [snapshots, setSnapshots] = useState<any[]>([]);
   const [recentRuns, setRecentRuns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

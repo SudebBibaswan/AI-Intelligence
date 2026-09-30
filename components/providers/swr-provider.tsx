@@ -9,7 +9,6 @@ export function SWRProvider({ children }: { children: React.ReactNode }) {
       revalidateOnReconnect: true,
       dedupingInterval: 30000,
       refreshInterval: 60000,
-      fallbackData: {}
     }}>
       {children}
     </SWRConfig>

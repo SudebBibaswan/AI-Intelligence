@@ -5,8 +5,13 @@ import { Building2, Filter, RefreshCw, Search, TrendingUp, Users } from "lucide-
 import { useCapitalDirectory } from "@/lib/hooks/intelligence";
 import { useWorkspace } from "@/lib/hooks/workspace";
 import { CapitalDirectoryEntry } from "@/types/intelligence";
+import { AppShell } from "@/components/layout/app-shell";
 
 export default function CapitalDirectoryPage() {
+  return <AppShell><CapitalDirectoryContent /></AppShell>;
+}
+
+function CapitalDirectoryContent() {
   const { workspace, workspaceDomain, isLoading: workspaceLoading } = useWorkspace();
   const workspaceId = workspace?.id;
   const workspaceDomainId = workspaceDomain?.id;

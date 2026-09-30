@@ -3,8 +3,13 @@
 import { useEffect, useState } from "react";
 import { fetchTheses } from "@/lib/api/intelligence";
 import { Thesis } from "@/types/intelligence";
+import { AppShell } from "@/components/layout/app-shell";
 
 export default function ThesesPage() {
+  return <AppShell><ThesesContent /></AppShell>;
+}
+
+function ThesesContent() {
   const [theses, setTheses] = useState<Thesis[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

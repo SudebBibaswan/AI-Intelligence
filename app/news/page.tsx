@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Filter, RefreshCw, ExternalLink, Clock, CheckCircle2, AlertCircle } from "lucide-react";
 import { useWorkspace } from "@/lib/hooks/workspace";
 import { Source, Evidence } from "@/types/intelligence";
+import { AppShell } from "@/components/layout/app-shell";
 
 interface FeedItem {
   id: string;
@@ -24,6 +25,10 @@ interface FeedItem {
 }
 
 export default function NewsFeedPage() {
+  return <AppShell><NewsFeedContent /></AppShell>;
+}
+
+function NewsFeedContent() {
   const { workspace, workspaceDomain, isLoading: workspaceLoading } = useWorkspace();
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);

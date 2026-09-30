@@ -1,30 +1,32 @@
 'use client'
 
 import useSWR from 'swr'
-import { createClient } from '@/lib/supabase/client'
+import { createClient, hasSupabaseConfig } from '@/lib/supabase/client'
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 
 export function useWorkspace() {
-  const { data, error, isLoading, mutate } = useSWR('/api/workspace/current', fetcher)
+  const configured = hasSupabaseConfig()
+  const { data, error, isLoading, mutate } = useSWR(configured ? '/api/workspace/current' : null, fetcher)
   
   return {
     workspace: data?.workspace,
     workspaceDomain: data?.workspace_domain,
     domain: data?.domain,
-    isLoading,
+    isLoading: configured && isLoading,
     error,
     mutate,
   }
 }
 
 export function useCurrentUser() {
-  const { data, error, isLoading, mutate } = useSWR('/api/auth/user', fetcher)
+  const configured = hasSupabaseConfig()
+  const { data, error, isLoading, mutate } = useSWR(configured ? '/api/auth/user' : null, fetcher)
   
   return {
     user: data?.user,
     profile: data?.profile,
-    isLoading,
+    isLoading: configured && isLoading,
     error,
     mutate,
   }

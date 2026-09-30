@@ -3,8 +3,13 @@
 import { useEffect, useState } from "react";
 import { fetchCapitalFlow } from "@/lib/api/intelligence";
 import { CapitalFlowMapping } from "@/types/intelligence";
+import { AppShell } from "@/components/layout/app-shell";
 
 export default function CapitalFlowPage() {
+  return <AppShell><CapitalFlowContent /></AppShell>;
+}
+
+function CapitalFlowContent() {
   const [mappings, setMappings] = useState<CapitalFlowMapping[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

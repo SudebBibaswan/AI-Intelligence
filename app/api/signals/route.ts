@@ -80,7 +80,10 @@ export async function GET(request: NextRequest) {
     // Fetch signal_entities
     const { data: signalEntities, error: sentError } = await supabase
       .from('signal_entities')
-      .select('signal_id, entity_id, role, entity:entities (id, name, entity_type, canonical_url, attributes, resolution_status, wikidata_qid)')
+      // Wikidata IDs are stored inside entities.external_ids, not as a column.
+      // Selecting the nonexistent column causes Supabase to reject the entire
+      // signals request, so only request fields present in the base table.
+      .select('signal_id, entity_id, role, entity:entities (id, name, entity_type, canonical_url, attributes, resolution_status, external_ids)')
       .in('signal_id', signalIds)
       .eq('workspace_id', workspaceId)
 

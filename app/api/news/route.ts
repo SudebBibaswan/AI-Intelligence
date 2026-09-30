@@ -112,6 +112,16 @@ export async function GET(request: NextRequest) {
       const verifiedEvidence = sourceEvidence.filter((e: any) => e.verification_status === 'verified')
       const totalEvidence = sourceEvidence.length
       const rrs = rrsBySource.get(source.id) || []
+      // An entity can be connected to more than one evidence record for the
+      // same source. Present it once in the feed, with its stable entity id.
+      const entities = Array.from(
+        new Map(
+          sourceEvidence
+            .flatMap((e: any) => e.entities?.map((ee: any) => ee.entity) || [])
+            .filter((entity: any) => entity?.id)
+            .map((entity: any) => [entity.id, entity])
+        ).values()
+      )
       
       return {
         id: source.id,
@@ -127,7 +137,7 @@ export async function GET(request: NextRequest) {
         evidenceCount: totalEvidence,
         verifiedEvidenceCount: verifiedEvidence.length,
         topClaims: verifiedEvidence.slice(0, 3).map((e: any) => e.claim_text),
-        entities: sourceEvidence.flatMap((e: any) => e.entities?.map((ee: any) => ee.entity) || []),
+        entities,
         triggerType: rrs[0]?.research_run?.trigger_type,
       }
     })

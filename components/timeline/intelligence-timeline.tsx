@@ -4,14 +4,15 @@ import Link from "next/link";
 import { Bookmark, CalendarDays, CircleDot, Layers3, Landmark, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useWorkspace } from "@/lib/hooks/workspace";
-import { fetchSignals, fetchPatterns, fetchInvestments } from "@/lib/api/intelligence";
+import { fetchNews, fetchSignals, fetchPatterns, fetchInvestments } from "@/lib/api/intelligence";
+import { readPersonalization } from "@/lib/personalization";
 
 interface TimelineEvent {
   id: string;
   date: string;
   day: string;
   time: string;
-  type: "Investment" | "Signal" | "Pattern" | "Saved";
+  type: "Article" | "Investment" | "Signal" | "Pattern" | "Saved";
   title: string;
   detail: string;
   icon: typeof Landmark;
@@ -57,38 +58,63 @@ export function IntelligenceTimeline() {
       setError(null);
 
       try {
-        const [signalsRes, patternsRes, investmentsRes] = await Promise.all([
+        const [signalsRes, patternsRes, investmentsRes, newsRes] = await Promise.all([
           fetchSignals({ workspace_id: workspaceId, domain_id: workspaceDomainId, limit: 100, status: 'accepted' }),
           fetchPatterns({ workspace_id: workspaceId, domain_id: workspaceDomainId, limit: 50, status: 'persistent' }),
           fetchInvestments({ workspace_id: workspaceId, domain_id: workspaceDomainId, limit: 50 }),
+          fetchNews({ workspace_id: workspaceId, domain_id: workspaceDomainId, limit: 50 }),
         ]);
 
         const timelineEvents: TimelineEvent[] = [];
 
+        // The timeline follows what entered the user's workspace, rather than
+        // the possibly older date on which an external event originally happened.
+        // That keeps the seven-day learning view aligned to recent research runs.
+
         // Add signals
         signalsRes.data.forEach((signal: any) => {
-          const eventDate = signal.event_at ? signal.event_at.split('T')[0] : signal.created_at.split('T')[0];
+          const discoveredAt = signal.created_at || signal.event_at;
+          const eventDate = discoveredAt.split('T')[0];
           timelineEvents.push({
             id: signal.id,
             date: eventDate,
             day: formatDay(eventDate),
-            time: formatTime(signal.event_at || signal.created_at),
+            time: formatTime(discoveredAt),
             type: "Signal",
             title: signal.title,
-            detail: `${signal.signal_evidence?.length || 0} evidence · ${Math.round((signal.confidence || 0) * 100)}% confidence`,
+            detail: `${signal.signal_evidence?.length || 0} evidence · ${Math.round((signal.confidence || 0) * 100)}% confidence${signal.event_at ? ` · event reported ${new Date(signal.event_at).toLocaleDateString()}` : ""}`,
             icon: Sparkles,
             href: `/signals/${signal.id}`,
           });
         });
 
+        // Add source articles on the date they were discovered for this workspace.
+        newsRes.data.forEach((article: any) => {
+          const discoveredAt = article.discoveredAt || article.publishedAt;
+          if (!discoveredAt) return;
+          const eventDate = discoveredAt.split('T')[0];
+          timelineEvents.push({
+            id: `article-${article.id}`,
+            date: eventDate,
+            day: formatDay(eventDate),
+            time: formatTime(discoveredAt),
+            type: "Article",
+            title: article.title,
+            detail: `${article.publisher || "Source"} · ${article.evidenceCount || 0} evidence item${article.evidenceCount === 1 ? "" : "s"}`,
+            icon: CircleDot,
+            href: article.url,
+          });
+        });
+
         // Add patterns
         patternsRes.data.forEach((pattern: any) => {
-          const eventDate = pattern.last_confirmed_at ? pattern.last_confirmed_at.split('T')[0] : pattern.created_at.split('T')[0];
+          const discoveredAt = pattern.created_at || pattern.last_confirmed_at;
+          const eventDate = discoveredAt.split('T')[0];
           timelineEvents.push({
             id: pattern.id,
             date: eventDate,
             day: formatDay(eventDate),
-            time: formatTime(pattern.last_confirmed_at || pattern.created_at),
+            time: formatTime(discoveredAt),
             type: "Pattern",
             title: pattern.statement,
             detail: `${(pattern.metadata?.observation_count as number) || 0} observations · Strength ${Math.round(pattern.strength_score * 100)}%`,
@@ -99,17 +125,35 @@ export function IntelligenceTimeline() {
 
         // Add investments
         investmentsRes.data.forEach((inv: any) => {
-          const eventDate = inv.announced_at ? inv.announced_at.split('T')[0] : inv.created_at?.split('T')[0] || new Date().toISOString().split('T')[0];
+          const discoveredAt = inv.created_at || inv.announced_at || new Date().toISOString();
+          const eventDate = discoveredAt.split('T')[0];
           timelineEvents.push({
             id: inv.id,
             date: eventDate,
             day: formatDay(eventDate),
-            time: formatTime(inv.announced_at || inv.created_at),
+            time: formatTime(discoveredAt),
             type: "Investment",
             title: `${inv.company?.name || 'Company'} closes ${inv.round_type || 'round'} for ${inv.company?.ai_domain || 'AI'}`,
-            detail: `$${((inv.amount_usd || inv.amount || 0) / 1000000).toFixed(1)}m · ${inv.investors?.map((i: any) => i.investor?.name).join(', ') || 'Undisclosed'}`,
+            detail: `$${((inv.amount_usd || inv.amount || 0) / 1000000).toFixed(1)}m · ${inv.investors?.map((i: any) => i.investor?.name).join(', ') || 'Undisclosed'}${inv.announced_at ? ` · announced ${new Date(inv.announced_at).toLocaleDateString()}` : ""}`,
             icon: Landmark,
             href: `/companies/${inv.company?.name?.toLowerCase().replace(/\s+/g, '-') || inv.id}`,
+          });
+        });
+
+        // Add items the user explicitly saved to the same learning timeline.
+        readPersonalization().filter((item) => item.saved).forEach((item) => {
+          const savedAt = item.updatedAt;
+          const eventDate = savedAt.split('T')[0];
+          timelineEvents.push({
+            id: `saved-${item.path}`,
+            date: eventDate,
+            day: formatDay(eventDate),
+            time: formatTime(savedAt),
+            type: "Saved",
+            title: item.title,
+            detail: `Saved ${item.type.toLowerCase()} · return to its evidence and context`,
+            icon: Bookmark,
+            href: item.path,
           });
         });
 
@@ -121,6 +165,12 @@ export function IntelligenceTimeline() {
         });
 
         setEvents(timelineEvents);
+        const today = new Date().toISOString().split('T')[0];
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+        const earliestDate = sevenDaysAgo.toISOString().split('T')[0];
+        const newestVisibleEvent = timelineEvents.find((event) => event.date >= earliestDate && event.date <= today);
+        if (newestVisibleEvent) setSelectedDay(newestVisibleEvent.date);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load timeline');
       } finally {
@@ -182,7 +232,7 @@ export function IntelligenceTimeline() {
       </section>
 
       <section className="flex gap-1 overflow-x-auto border-b border-[#30345f]">
-        {["All activity", "Investment", "Signal", "Pattern", "Saved"].map((item) => (
+        {["All activity", "Article", "Investment", "Signal", "Pattern", "Saved"].map((item) => (
           <button
             key={item}
             onClick={() => setFilter(item)}
@@ -203,7 +253,7 @@ export function IntelligenceTimeline() {
       ) : (
         <section className="space-y-4">
           {visible.map((event) => (
-            <article key={event.id} className="surface flex gap-4 p-5">
+            <article key={`${event.type}-${event.id}`} className="surface flex gap-4 p-5">
               <span className="grid h-10 w-10 place-items-center rounded-lg bg-[#171c42] text-[#aeb6ff] shrink-0">
                 <event.icon size={18} />
               </span>
@@ -213,7 +263,7 @@ export function IntelligenceTimeline() {
                     <h3 className="font-semibold text-sm">{event.title}</h3>
                     <span className="rounded border border-[#3b4378] bg-[#171c42] px-2 py-0.5 font-mono text-[9px] text-[#a5abc9]">{event.type}</span>
                   </div>
-                  <Link href={event.href} className="text-xs font-semibold text-[#aeb6ff] hover:underline shrink-0">Open</Link>
+                  <Link href={event.href} className="text-xs font-semibold text-[#aeb6ff] hover:underline shrink-0" {...(event.type === "Article" ? { target: "_blank", rel: "noopener noreferrer" } : {})}>Open</Link>
                 </div>
                 <p className="mt-1 text-xs text-[#a5abc9] line-clamp-2">{event.detail}</p>
                 <p className="mt-2 flex items-center gap-3 text-[10px] text-[#8d93b6]">

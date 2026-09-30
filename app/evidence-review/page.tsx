@@ -2,8 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { fetchEvidenceReviewQueue, submitEvidenceReview } from "@/lib/api/intelligence";
+import { AppShell } from "@/components/layout/app-shell";
 
 export default function EvidenceReviewPage() {
+  return <AppShell><EvidenceReviewContent /></AppShell>;
+}
+
+function EvidenceReviewContent() {
   const [queue, setQueue] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

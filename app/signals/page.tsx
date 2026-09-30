@@ -4,8 +4,13 @@ import { useEffect, useState } from "react";
 import { useSignals } from "@/lib/hooks/intelligence";
 import { Signal } from "@/types/intelligence";
 import { useWorkspace } from "@/lib/hooks/workspace";
+import { AppShell } from "@/components/layout/app-shell";
 
 export default function SignalsPage() {
+  return <AppShell><SignalsContent /></AppShell>;
+}
+
+function SignalsContent() {
   const { workspace, workspaceDomain, isLoading: workspaceLoading } = useWorkspace();
   const workspaceId = workspace?.id;
   const workspaceDomainId = workspaceDomain?.id;

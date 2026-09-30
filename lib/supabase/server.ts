@@ -34,3 +34,28 @@ export async function createClient() {
     }
   )
 }
+
+/**
+ * Creates a server-only client for trusted operations after the request user
+ * has already been authenticated and authorised. Never import this from a
+ * Client Component: the service-role key bypasses RLS.
+ */
+export function createAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!url || !serviceRoleKey) {
+    throw new Error("Supabase service role configuration is missing")
+  }
+
+  return createServerClient(url, serviceRoleKey, {
+    cookies: {
+      getAll() {
+        return []
+      },
+      setAll() {
+        // A service client must never write authentication cookies.
+      },
+    },
+  })
+}
