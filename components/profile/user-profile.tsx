@@ -3,8 +3,6 @@
 import { Bookmark, Building2, Check, Heart, Mail, Pencil, Share2, UserRound, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useCurrentUser } from "@/lib/hooks/workspace";
-import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
 
 const roles = ["Student", "Founder", "Working professional", "Investor / analyst", "Researcher"];
 const interests = ["Track AI investments", "Spot emerging patterns", "Research companies", "Develop a market thesis"];
@@ -20,8 +18,6 @@ interface WorkspaceSettings {
 }
 
 export function UserProfile() {
-  const router = useRouter();
-  const supabase = createClient();
   const { user, profile: userProfile, isLoading, mutate } = useCurrentUser();
   const [workspaceSettings, setWorkspaceSettings] = useState<WorkspaceSettings>({});
   const [editing, setEditing] = useState(false);

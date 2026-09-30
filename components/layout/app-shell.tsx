@@ -7,7 +7,7 @@ import { IntelligenceSearch } from "@/components/search/intelligence-search";
 import { BookOpen, ChevronDown, Compass, History, Landmark, Library, LogOut, Menu, Newspaper, Settings, UserRound, X, Database } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useCurrentUser } from "@/lib/hooks/workspace";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, hasSupabaseConfig } from "@/lib/supabase/client";
 
 const navigation = [
   { href: "/workspace", label: "Overview", icon: Compass },
@@ -42,11 +42,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = hasSupabaseConfig() ? createClient() : null;
   const { user, profile, isLoading } = useCurrentUser();
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    await supabase?.auth.signOut();
     router.push("/login");
     router.refresh();
   };

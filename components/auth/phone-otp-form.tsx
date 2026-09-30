@@ -4,14 +4,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Check, ChevronLeft, LockKeyhole, ShieldCheck, Sparkles, AlertCircle } from "lucide-react";
 import { FormEvent, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, hasSupabaseConfig } from "@/lib/supabase/client";
 
 type AuthMode = "login" | "signup";
 
 export function PhoneOtpForm({ mode = "login" }: { mode?: AuthMode }) {
   const isSignup = mode === "signup";
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = hasSupabaseConfig() ? createClient() : null;
   
   const [authMode, setAuthMode] = useState<"password" | "otp">("password");
   const [email, setEmail] = useState("");
@@ -35,6 +35,12 @@ export function PhoneOtpForm({ mode = "login" }: { mode?: AuthMode }) {
     setNotice(null);
     
     try {
+      if (!supabase) {
+        localStorage.setItem("ai-intelligence-demo-session", "true");
+        setNotice("Demo mode is active. Connect Supabase to create a persistent account.");
+        router.push(isSignup ? "/onboarding/profile" : "/workspace");
+        return;
+      }
       if (isSignup) {
         const { data: signUpData, error } = await supabase.auth.signUp({
           email,
@@ -77,6 +83,11 @@ export function PhoneOtpForm({ mode = "login" }: { mode?: AuthMode }) {
     setError(null);
     
     try {
+      if (!supabase) {
+        setNotice("Demo mode is active. Enter any six-digit code to continue.");
+        setAuthMode("otp");
+        return;
+      }
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
@@ -101,6 +112,11 @@ export function PhoneOtpForm({ mode = "login" }: { mode?: AuthMode }) {
     setError(null);
     
     try {
+      if (!supabase) {
+        localStorage.setItem("ai-intelligence-demo-session", "true");
+        router.push(continueTo);
+        return;
+      }
       const { error } = await supabase.auth.verifyOtp({
         email,
         token: code,
